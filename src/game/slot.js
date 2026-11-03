@@ -112,7 +112,7 @@ export class Slot {
         r.pos = (r.from + (r.target - r.from) * e) % N;
         if (k >= 1) {
           r.pos = r.target % N; r.state = 'stopped';
-          this.g.audio.reelStop(i);
+          this.g.audio.reelStop(i, i === 2);
           if (i === 1 && this.reach && !this.reachAnnounced) { this.reachAnnounced = true; this.g.onReach(); }
         }
       }

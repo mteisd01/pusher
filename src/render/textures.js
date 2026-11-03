@@ -169,7 +169,7 @@ export function makeCoinFace(design, size = 512, opts = {}) {
   h.strokeStyle = rg; h.beginPath(); h.arc(cx, cy, R * 0.93, 0, TAU); h.stroke();
   // beaded inner ring
   h.fillStyle = gray(0.62);
-  const beads = design === 'big' ? 72 : 60;
+  const beads = design === 'big' || design === 'giant' ? 72 : 60;
   for (let i = 0; i < beads; i++) {
     const a = i / beads * TAU;
     h.beginPath(); h.arc(cx + Math.cos(a) * R * 0.815, cy + Math.sin(a) * R * 0.815, R * 0.018, 0, TAU); h.fill();
@@ -181,7 +181,7 @@ export function makeCoinFace(design, size = 512, opts = {}) {
   const tsize = R * 0.13;
   const label = {
     silver: ['PUSHER', 'MEDAL'], gold: ['GOLDEN', 'MEDAL'], rainbow: ['RAINBOW', 'MEDAL'],
-    big: ['BIG', 'MEDAL'], token: ['', ''],
+    big: ['BIG', 'MEDAL'], giant: ['GIANT', 'MEDAL'], token: ['', ''],
   }[design] || ['', ''];
   if (label[0]) arcText(h, label[0], cx, cy, R * 0.695, -Math.PI / 2 - 0.12 * (label[0].length - 1) / 2 * 1.9, 0.228 * (label[0].length - 1), tsize);
   if (label[1]) arcText(h, label[1], cx, cy, R * 0.695, Math.PI / 2 + 0.11 * (label[1].length - 1) * 0.95, 0.21 * (label[1].length - 1), tsize, true);
@@ -198,12 +198,12 @@ export function makeCoinFace(design, size = 512, opts = {}) {
     h.fillStyle = gray(0.55); h.fillRect(cx - R * 0.36, cy + R * 0.25, R * 0.72, R * 0.08);
   } else if (design === 'rainbow') {
     facetStar(h, cx, cy, R * 0.44, R * 0.3, 8, 0.98, 0.52);
-  } else if (design === 'big') {
+  } else if (design === 'big' || design === 'giant') {
     h.font = `900 ${R * 0.62}px "Arial Black", Arial, sans-serif`;
     h.textAlign = 'center'; h.textBaseline = 'middle';
     const g = h.createLinearGradient(0, cy - R * 0.3, 0, cy + R * 0.3);
     g.addColorStop(0, gray(0.95)); g.addColorStop(1, gray(0.7));
-    h.fillStyle = g; h.fillText('30', cx, cy + R * 0.04);
+    h.fillStyle = g; h.fillText(design === 'giant' ? '50' : '30', cx, cy + R * 0.04);
   } else if (design === 'token') {
     h.fillStyle = gray(0.2); h.beginPath(); h.arc(cx, cy, R * 0.57, 0, TAU); h.fill();
   }
@@ -226,7 +226,7 @@ export function makeCoinFace(design, size = 512, opts = {}) {
     const lathe = 0.5 + 0.5 * Math.sin(d * 420 + Math.sin(Math.atan2(dy, dx) * 3) * 0.3);
     const ao = 0.7 + 0.3 * Math.min(1, hv * 1.6);
     let alb = ao * (0.93 + lathe * 0.05);
-    let rough = 0.32 - (hv - 0.35) * 0.35 + lathe * 0.05;
+    let rough = 0.40 - (hv - 0.35) * 0.3 + lathe * 0.05;
     if (d > 0.995) { alb *= 0.6; rough = 0.5; }
     alb = Math.min(1, alb);
     ai.data[i * 4] = ai.data[i * 4 + 1] = ai.data[i * 4 + 2] = alb * 255; ai.data[i * 4 + 3] = 255;
@@ -403,14 +403,6 @@ export function makeFieldTexture(theme, halfW = 11, w = 1024, h = 1024) {
     }
   }
   g.globalAlpha = 1;
-  // CHANCE zone at the front center (coins falling here may add slot stock)
-  const cw = w * 3.2 / (halfW * 2);
-  const cz = g.createLinearGradient(0, h * 0.86, 0, h);
-  cz.addColorStop(0, 'rgba(124,255,178,0)'); cz.addColorStop(1, 'rgba(124,255,178,0.55)');
-  g.fillStyle = cz; g.fillRect(w / 2 - cw / 2, h * 0.86, cw, h * 0.14);
-  g.strokeStyle = '#7CFFB2'; g.lineWidth = 4; g.setLineDash([12, 8]); g.strokeRect(w / 2 - cw / 2, h * 0.86, cw, h * 0.14 - 2); g.setLineDash([]);
-  g.fillStyle = '#eafff2'; g.font = '900 34px "Arial Black", Arial'; g.textAlign = 'center'; g.textBaseline = 'middle';
-  g.fillText('CHANCE', w / 2, h * 0.94);
   // center logo
   g.save(); g.translate(w / 2, h * 0.38); g.globalAlpha = 0.18; g.fillStyle = theme.floorLine;
   starPath(g, 0, 0, 120, 50); g.fill();

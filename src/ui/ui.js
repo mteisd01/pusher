@@ -22,6 +22,8 @@ const ICONS = {
   full: '<svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
   sound: '<svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"/><path d="M16 8a5 5 0 010 8M18.5 5.5a8.5 8.5 0 010 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
   mute: '<svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"/><path d="M16 9l5 6M21 9l-5 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+  pause: '<svg viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" rx="1" fill="currentColor"/><rect x="14" y="5" width="4" height="14" rx="1" fill="currentColor"/></svg>',
+  play: '<svg viewBox="0 0 24 24"><path d="M7 5l12 7-12 7z" fill="currentColor"/></svg>',
   help: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M9.5 9a2.5 2.5 0 114 2c-1 .7-1.5 1.2-1.5 2.5M12 17h.01" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
   coin: '<svg viewBox="0 0 24 24"><defs><radialGradient id="cg" cx="40%" cy="35%"><stop offset="0" stop-color="#fff6c0"/><stop offset=".6" stop-color="#e6b422"/><stop offset="1" stop-color="#8a6200"/></radialGradient></defs><circle cx="12" cy="12" r="10" fill="url(#cg)"/><circle cx="12" cy="12" r="7" fill="none" stroke="#8a6200" stroke-width="1.2"/><path d="M12 7.5l1.3 2.8 3 .3-2.3 2 .7 3-2.7-1.6-2.7 1.6.7-3-2.3-2 3-.3z" fill="#a87400"/></svg>',
 };
@@ -52,6 +54,7 @@ export class UI {
       </div>
       <div class="hud-fx" id="hFx"></div>
       <div class="hud-tr">
+        <button class="ib" id="bPause" aria-label="pause">${ICONS.pause}</button>
         <button class="ib" data-tab="missions" aria-label="missions">${ICONS.missions}<b class="badge hidden" id="hMisBadge"></b></button>
         <button class="ib" data-tab="shop" aria-label="shop">${ICONS.shop}</button>
         <button class="ib" data-tab="achievements" aria-label="collection">${ICONS.trophy}</button>
@@ -77,6 +80,8 @@ export class UI {
     this.modal.innerHTML = `<div class="sheet"><div class="tabs" id="mTabs"></div><button class="close" id="mClose" aria-label="close">✕</button><div class="body" id="mBody"></div></div>`;
     r.appendChild(this.modal);
     this.dialog = h('div', 'dialog hidden'); r.appendChild(this.dialog);
+    this.pauseEl = h('div', 'pausebox hidden', `<div class="ptitle"></div><div class="row"><button class="btn primary" id="pResume"></button><button class="btn" id="pMenu"></button><button class="btn" id="pCam"></button></div>`);
+    r.appendChild(this.pauseEl);
     this.rotateEl = h('div', 'rotate hidden', `<div class="phone"></div><p id="rotMsg"></p><button class="btn" id="rotBtn"></button>`);
     r.appendChild(this.rotateEl);
 
@@ -90,13 +95,31 @@ export class UI {
     const rel = () => this.game.release();
     drop.addEventListener('pointerup', rel); drop.addEventListener('pointercancel', rel);
     $('#bCam', this.hud).addEventListener('click', () => this.o.onCycleCamera());
+    $('#bPause', this.hud).addEventListener('click', () => { this.game.audio.ui(); this.togglePause(); });
+    $('#pResume', this.pauseEl).addEventListener('click', () => this.togglePause(false));
+    $('#pMenu', this.pauseEl).addEventListener('click', () => this.open('shop'));
+    $('#pCam', this.pauseEl).addEventListener('click', () => this.o.onCycleCamera());
     $('#bFull', this.hud).addEventListener('click', () => this.o.onFullscreen());
     $('#bMute', this.hud).addEventListener('click', () => this.o.onToggleMute());
     $('#rotBtn', this.rotateEl).addEventListener('click', () => { this.rotateDismissed = true; this.checkOrientation(); });
     this.hintEl.addEventListener('click', () => this.nextHint());
   }
 
+  togglePause(force) {
+    const on = force !== undefined ? force : !this.game.pauseReasons.has('user');
+    this.game.setPause('user', on);
+  }
+  onPauseChange(paused, user) {
+    this.pauseEl.classList.toggle('hidden', !user);
+    $('#bPause', this.hud).innerHTML = user ? ICONS.play : ICONS.pause;
+    document.body.classList.toggle('paused', paused);
+  }
+
   refreshTexts() {
+    $('.ptitle', this.pauseEl).textContent = t('paused');
+    $('#pResume', this.pauseEl).textContent = t('resume');
+    $('#pMenu', this.pauseEl).textContent = t('menu');
+    $('#pCam', this.pauseEl).textContent = t('camera');
     $('#rotMsg', this.rotateEl).textContent = t('rotate');
     $('#rotBtn', this.rotateEl).textContent = t('playAnyway');
     $('#bDrop span', this.hud).textContent = t('drop');
@@ -141,14 +164,18 @@ export class UI {
     if (fx.double > 0) chips.push(`<span class="chip dbl">×2 ${Math.ceil(fx.double)}</span>`);
     if (g.settings.f_slot) chips.push(`<span class="chip stock">${t('stock')} ${s.stock}/${g.stockMax()}</span>`);
     if (g.settings.f_jp) chips.push(`<span class="chip jp">JP ${fmt(s.jpPool)}</span>`);
-    if (g.combo >= 5) chips.push(`<span class="chip combo">${g.combo} COMBO</span>`);
+    if (fx.magnet > 0) chips.push(`<span class="chip turbo">MAG ${Math.ceil(fx.magnet)}</span>`);
+    if (g.settings.f_sugoroku) chips.push(`<span class="chip road">🎲${s.dice || 0} · ${(s.roadPos || 0)}/24</span>`);
+    const ev = g.features.event;
+    if (ev) chips.push(`<span class="chip fever">${t('ev_' + ev.id)} ${Math.ceil(ev.t)}${ev.id === 'challenge' ? ` · ${ev.progress || 0}/${ev.target}` : ''}</span>`);
+    if (g.features.pocketOpen) chips.push(`<span class="chip combo">POCKET</span>`);
     const html = chips.join('');
     if (html !== this._chips) { $('#hFx', this.hud).innerHTML = html; this._chips = html; }
     const ms = s.missions;
     const claim = ms && g.settings.f_missions ? ms.list.filter(m => m.done && !m.claimed).length : 0;
     const b = $('#hMisBadge', this.hud); b.textContent = claim; b.classList.toggle('hidden', !claim);
     if (g.settings.showFps) $('#hFps', this.hud).textContent = `${t('fps')} ${info.fps.toFixed(0)} | ${t('objects')} ${g.objCount} | ${t('physMs')} ${(g.physMs || 0).toFixed(1)}ms`;
-    if (!this.modal.classList.contains('hidden') && (this.tab === 'shop' || this.tab === 'missions' || this.tab === 'stats')) {
+    if (!this.modal.classList.contains('hidden') && (this.tab === 'shop' || this.tab === 'missions' || this.tab === 'stats' || this.tab === 'road')) {
       this._liveAcc = (this._liveAcc || 0) + 1;
       if (this._liveAcc % 5 === 0) this.renderTab(true);
     }
@@ -228,12 +255,13 @@ export class UI {
     this.game.release();
     this.renderTabs();
     this.renderTab();
+    this.game.setPause('menu', !!this.s.pauseOnMenu);
   }
-  close() { this.modal.classList.add('hidden'); this.o.onMenuClose && this.o.onMenuClose(); }
+  close() { this.modal.classList.add('hidden'); this.game.setPause('menu', false); this.o.onMenuClose && this.o.onMenuClose(); }
   isOpen() { return !this.modal.classList.contains('hidden') || !this.dialog.classList.contains('hidden'); }
 
   renderTabs() {
-    const tabs = [['shop', t('shop')], ['missions', t('missions')], ['achievements', t('achievements')], ['gems', t('gems')], ['stats', t('stats')], ['themes', t('themes')], ['settings', t('settings')], ['data', t('data')], ['help', t('help')]];
+    const tabs = [['shop', t('shop')], ['missions', t('missions')], ['road', t('road')], ['achievements', t('achievements')], ['gems', t('gems')], ['stats', t('stats')], ['themes', t('themes')], ['settings', t('settings')], ['data', t('data')], ['help', t('help')]];
     const el = $('#mTabs', this.modal);
     el.innerHTML = tabs.map(([id, n]) => `<button class="tab ${id === this.tab ? 'on' : ''}" data-t="${id}">${n}</button>`).join('');
     el.querySelectorAll('.tab').forEach(b => b.onclick = () => { this.tab = b.dataset.t; this.game.audio.ui(); this.renderTabs(); this.renderTab(); });
@@ -277,7 +305,7 @@ export class UI {
     const names = {
       dropped: ['dropped'], won: ['won'], slotSpins: ['slotSpins'], slotWins: ['slotWins'], sevens: ['sevens'], jpLottery: ['jpLottery'], jpWins: ['jpWins'], fevers: ['fevers'],
       maxCombo: ['maxCombo'], items: ['items'], chests: ['chests'], gatePasses: ['gatePasses'], gemsUnique: ['gems'], level: [], maxWallet: ['maxWallet'], biggestWin: ['biggestWin'],
-      playTime: ['playTime'], loginStreak: [], upgradesTotal: [], walls: [], missionsDone: [],
+      playTime: ['playTime'], loginStreak: [], upgradesTotal: [], walls: [], missionsDone: [], roadLaps: ['roadLaps'], events: ['events'], challenges: ['challenges'], pockets: ['pockets'], plinkos: ['plinkos'], croonBest: ['croonBest'],
     };
     const ja = getLang() === 'ja';
     const label = {
@@ -314,7 +342,7 @@ export class UI {
   tab_stats(body) {
     const g = this.game, st = g.save.stats;
     const time = s => { s = Math.floor(s || 0); return `${Math.floor(s / 3600)}h ${Math.floor(s / 60) % 60}m`; };
-    const rows = [['dropped'], ['won'], ['lost'], ['payout', st.dropped ? `${((st.won || 0) / st.dropped * 100).toFixed(1)}%` : '-'], ['gatePasses'], ['slotSpins'], ['slotWins'], ['sevens'], ['jpLottery'], ['jpWins'], ['fevers'], ['maxCombo'], ['items'], ['gems'], ['chests'], ['biggestWin'], ['maxWallet'], ['playTime', time(st.playTime)]];
+    const rows = [['diceRolls'], ['roadLaps'], ['events'], ['challenges'], ['pockets'], ['plinkos'], ['croonBest'], ['dropped'], ['won'], ['lost'], ['payout', st.dropped ? `${((st.won || 0) / st.dropped * 100).toFixed(1)}%` : '-'], ['gatePasses'], ['slotSpins'], ['slotWins'], ['sevens'], ['jpLottery'], ['jpWins'], ['fevers'], ['maxCombo'], ['items'], ['gems'], ['chests'], ['biggestWin'], ['maxWallet'], ['playTime', time(st.playTime)]];
     body.innerHTML = `<div class="stats">` + rows.map(([k, v]) => `<div class="srow"><span>${t('st_' + k)}</span><b>${v !== undefined ? v : fmt(st[k] || 0)}</b></div>`).join('') + `</div>`;
   }
 
@@ -327,6 +355,12 @@ export class UI {
         <button class="btn ${cur ? '' : 'primary'}" data-th="${th.id}" ${!unlocked || cur ? 'disabled' : ''}>${!unlocked ? t('unlockAt', th.unlock) : cur ? t('equipped') : t('equip')}</button></div>`;
     }).join('') + '</div>';
     body.querySelectorAll('[data-th]').forEach(b => b.onclick = () => { g.settings.theme = b.dataset.th; this.o.onSettings('theme'); this.renderTab(); });
+  }
+
+  tab_road(body) {
+    const g = this.game, f = g.features, pos = g.save.roadPos || 0;
+    body.innerHTML = `<h3>${t('road')} <small>${t('lap')} ${(g.save.roadLap || 0) + 1} · ${t('dice')} ${g.save.dice || 0} · GATE ${g.save.roadGate || 0}/10</small></h3><p class="note">${t('roadInfo')}</p>
+      <div class="roadgrid">${f.board().map((s, i) => `<div class="sq ${i === pos ? 'cur' : ''}" style="--c:${s.color}"><small>${i}</small>${esc(f.squareLabel(s))}</div>`).join('')}</div>`;
   }
 
   tab_help(body) {
@@ -346,19 +380,19 @@ export class UI {
         ['bloom', 'toggle'], ['reflections', 'toggle'], ['particles', 'range', 0, 2, 0.1],
         ['coinDetail', 'select', ['low', 'medium', 'high', 'ultra'].map(v => [v, t('q_' + v)])],
         ['maxFps', 'select', [[0, getLang() === 'ja' ? '無制限' : 'Unlimited'], [30, '30'], [60, '60']]],
-        ['showFps', 'toggle'], ['shake', 'toggle'], ['leds', 'toggle'], ['antialias', 'toggle'],
+        ['coinReflect', 'range', 0.3, 1.5, 0.05], ['showFps', 'toggle'], ['shake', 'toggle'], ['leds', 'toggle'], ['antialias', 'toggle'],
       ]],
       ['g_physics', [
         ['maxObjects', 'range', 300, 1500, 50], ['physHz', 'select', [[45, '45Hz'], [60, '60Hz'], [90, '90Hz'], [120, '120Hz']]], ['prefill', 'range', 0, 900, 20], ['worker', 'toggle'],
       ]],
-      ['g_sound', [['master', 'range', 0, 1, 0.05], ['bgm', 'range', 0, 1, 0.05], ['se', 'range', 0, 1, 0.05], ['muteHidden', 'toggle']]],
+      ['g_sound', [['master', 'range', 0, 1, 0.05], ['bgm', 'range', 0, 1, 0.05], ['se', 'range', 0, 1, 0.05], ['ambience', 'range', 0, 1, 0.05], ['muteHidden', 'toggle']]],
       ['g_controls', [
-        ['autoDrop', 'toggle'], ['autoMode', 'select', ['follow', 'sweep', 'center', 'random'].map(v => [v, t('a_' + v)])],
+        ['pauseOnMenu', 'toggle'], ['autoDrop', 'toggle'], ['autoMode', 'select', ['follow', 'sweep', 'center', 'random'].map(v => [v, t('a_' + v)])],
         ['holdRepeat', 'toggle'], ['dropButton', 'toggle'], ['showBeam', 'toggle'], ['vibrate', 'toggle'], ['leftHand', 'toggle'], ['uiScale', 'range', 0.7, 1.4, 0.05],
       ]],
       ['g_features', [
         ['difficulty', 'select', ['easy', 'normal', 'hard'].map(v => [v, t('d_' + v)])],
-        ['f_slot', 'toggle'], ['slotFast', 'toggle'], ['f_jp', 'toggle'], ['jpSkip', 'toggle'], ['f_items', 'toggle'], ['f_gems', 'toggle'], ['f_fever', 'toggle'], ['f_walls', 'toggle'],
+        ['f_slot', 'toggle'], ['slotFast', 'toggle'], ['f_jp', 'toggle'], ['f_croon', 'toggle'], ['jpSkip', 'toggle'], ['f_sugoroku', 'toggle'], ['f_events', 'toggle'], ['f_plinko', 'toggle'], ['f_bonusZone', 'toggle'], ['f_items', 'toggle'], ['f_gems', 'toggle'], ['f_fever', 'toggle'], ['f_walls', 'toggle'],
         ['sideLoss', 'toggle'], ['f_combo', 'toggle'], ['f_missions', 'toggle'], ['f_login', 'toggle'], ['f_regen', 'toggle'],
         ['f_achievePopups', 'toggle'], ['f_floatText', 'toggle'], ['f_hints', 'toggle'],
       ]],

@@ -38,6 +38,9 @@ export function createEngine(post) {
     switch (c[0]) {
       case 'spawn': phys.spawn(c[1], c[2], c[3], c[4], c[5], c[6], c[7], c[8], c[9]); break;
       case 'walls': phys.wallsUp = !!c[1]; break;
+      case 'pocket': phys.pocketOpen = !!c[1]; break;
+      case 'magnet': phys.magnet = !!c[1]; break;
+      case 'blast': phys.blast(c[1], c[2], c[3], c[4]); break;
       case 'speed': phys.speed = c[1]; break;
       case 'stroke': phys.strokeBonus = c[1]; break;
       case 'hz': phys.setHz(c[1]); break;

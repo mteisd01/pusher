@@ -25,6 +25,12 @@ tiers('loginStreak', [[3, 50], [7, 300], [30, 2000]], '📅');
 tiers('upgradesTotal', [[1, 30], [10, 300], [30, 1500], [55, 10000]], '🔧');
 tiers('walls', [[1, 20], [30, 400]], '🛡');
 tiers('missionsDone', [[1, 30], [30, 500], [200, 3000]], '✅');
+tiers('roadLaps', [[1, 100], [5, 500], [20, 2500]], '🎲');
+tiers('events', [[1, 30], [20, 300], [100, 1500]], '🚨');
+tiers('challenges', [[1, 50], [10, 400]], '⏱');
+tiers('pockets', [[1, 20], [50, 300], [500, 2000]], '🕳');
+tiers('plinkos', [[1, 20], [25, 300]], '📍');
+tiers('croonBest', [[2, 50], [3, 300]], '🎯');
 export const ACHIEVEMENTS = A;
 
 const MISSION_POOL = [
@@ -37,6 +43,9 @@ const MISSION_POOL = [
   { id: 'fevers', base: [1, 1, 2], feat: 'f_fever' },
   { id: 'jpLottery', base: [1, 1, 2], feat: 'f_jp' },
   { id: 'gems', base: [1, 2, 3], feat: 'f_gems' },
+  { id: 'pockets', base: [3, 6, 10], feat: 'f_bonusZone' },
+  { id: 'diceRolls', base: [3, 6, 10], feat: 'f_sugoroku' },
+  { id: 'events', base: [1, 2, 3], feat: 'f_events' },
 ];
 
 export const today = () => { const d = new Date(); return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`; };
@@ -113,7 +122,7 @@ export class Progression {
       list: pick.map(m => ({
         id: m.id, target: m.base[tier], special: !!m.special,
         start: m.special ? 0 : this.stat(m.id), progress: 0, done: false, claimed: false,
-        reward: Math.round((60 + s.level * 6) * (1 + tier * 0.5)),
+        reward: Math.round((35 + s.level * 4) * (1 + tier * 0.5)),
       })),
     };
   }
@@ -137,7 +146,7 @@ export class Progression {
     this.add('missionsDone');
     if (!this.s.missions.bonus && this.s.missions.list.every(x => x.claimed)) {
       this.s.missions.bonus = true;
-      const b = 150 + this.s.level * 10;
+      const b = 90 + this.s.level * 6;
       this.g.credit(b, 'mission');
       this.g.toast('✅', `${this.g.t('allMissions')} +${b}`);
     }

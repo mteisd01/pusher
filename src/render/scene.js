@@ -3,7 +3,7 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
-import { L } from '../core/layout.js';
+import { L, POCKET } from '../core/layout.js';
 import { makeFieldTexture, makeSurfaceTexture } from './textures.js';
 
 let W = L.halfW;
@@ -26,7 +26,7 @@ export class Stage {
     const r = this.renderer;
     r.outputColorSpace = THREE.SRGBColorSpace;
     r.toneMapping = THREE.ACESFilmicToneMapping;
-    r.toneMappingExposure = 1.1;
+    r.toneMappingExposure = 1.0;
     r.shadowMap.enabled = true;
     r.shadowMap.type = THREE.PCFShadowMap;
     this.scene = new THREE.Scene();
@@ -57,8 +57,8 @@ export class Stage {
     s.add(key, key.target);
     this.sideLights = [];
     for (const sx of [-1, 1]) {
-      const pl = new THREE.PointLight(0xffffff, 10, 24, 2);
-      pl.position.set(sx * (W - 2), 4.5, 0);
+      const pl = new THREE.PointLight(0xffffff, 10, 26, 2);
+      pl.position.set(sx * (W + 0.5), 7.5, 1);
       s.add(pl);
       this.sideLights.push(pl);
     }
@@ -69,6 +69,19 @@ export class Stage {
 
   _dynamic() {
     const s = this.scene;
+    // Pocket lid
+    this.lid = new THREE.Mesh(new THREE.BoxGeometry(POCKET.hw * 2 - 0.02, 0.1, POCKET.hd * 2 - 0.02), new THREE.MeshStandardMaterial({ color: 0x999999, metalness: 0.9, roughness: 0.3 }));
+    this.lid.position.set(POCKET.x, -0.05, POCKET.z); this.lid.receiveShadow = true;
+    s.add(this.lid);
+    // Moving bonus zone along the front edge
+    this.bonusMat = new THREE.MeshBasicMaterial({ color: 0x7CFFB2, transparent: true, opacity: 0.5, depthWrite: false, toneMapped: false, blending: THREE.AdditiveBlending });
+    this.bonus = new THREE.Mesh(new THREE.PlaneGeometry(1, 1.4), this.bonusMat);
+    this.bonus.rotation.x = -Math.PI / 2;
+    this.bonus.position.set(0, 0.015, L.frontZ - 0.7);
+    s.add(this.bonus);
+    this.bonusLip = new THREE.Mesh(new THREE.BoxGeometry(1, 0.08, 0.1), new THREE.MeshBasicMaterial({ color: 0x7CFFB2, toneMapped: false }));
+    this.bonusLip.position.set(0, -0.1, L.frontZ + 0.13);
+    s.add(this.bonusLip);
     // Pusher
     this.pusherMat = new THREE.MeshStandardMaterial({ color: 0xcfd3da, metalness: 0.9, roughness: 0.28 });
     this.pusherTopMat = new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 0.7, roughness: 0.38 });
@@ -165,10 +178,28 @@ export class Stage {
     // Field floor
     const ftex = makeFieldTexture(theme, W);
     const floorMat = new THREE.MeshStandardMaterial({ map: ftex, metalness: 0.55, roughness: 0.42 });
-    const fl = new THREE.Mesh(new THREE.PlaneGeometry(W * 2, L.frontZ - L.backWallZ), floorMat);
-    fl.rotation.x = -Math.PI / 2; fl.position.set(0, 0, (L.frontZ + L.backWallZ) / 2);
+    // floor with a rectangular hole for the center pocket
+    const z0 = L.backWallZ, z1 = L.frontZ, P = POCKET;
+    const shape = new THREE.Shape();
+    shape.moveTo(-W, -z1); shape.lineTo(W, -z1); shape.lineTo(W, -z0); shape.lineTo(-W, -z0); shape.closePath();
+    const hole = new THREE.Path();
+    hole.moveTo(P.x - P.hw, -(P.z - P.hd)); hole.lineTo(P.x - P.hw, -(P.z + P.hd)); hole.lineTo(P.x + P.hw, -(P.z + P.hd)); hole.lineTo(P.x + P.hw, -(P.z - P.hd)); hole.closePath();
+    shape.holes.push(hole);
+    const fg = new THREE.ShapeGeometry(shape);
+    const pa = fg.attributes.position, uv = fg.attributes.uv;
+    for (let i = 0; i < pa.count; i++) uv.setXY(i, (pa.getX(i) + W) / (2 * W), (pa.getY(i) + z1) / (z1 - z0));
+    const fl = new THREE.Mesh(fg, floorMat);
+    fl.rotation.x = -Math.PI / 2;
     fl.receiveShadow = true;
     g.add(fl);
+    // pocket shaft + rim
+    const shaft = new THREE.Mesh(new THREE.BoxGeometry(P.hw * 2, 2, P.hd * 2), new THREE.MeshStandardMaterial({ color: 0x060606, roughness: 0.9, side: THREE.BackSide }));
+    shaft.position.set(P.x, -1, P.z); g.add(shaft);
+    this.pocketRimMat = new THREE.MeshBasicMaterial({ color: theme.accent, toneMapped: false });
+    for (const [w, d, x, z] of [[P.hw * 2 + 0.2, 0.1, 0, -P.hd - 0.05], [P.hw * 2 + 0.2, 0.1, 0, P.hd + 0.05], [0.1, P.hd * 2, -P.hw - 0.05, 0], [0.1, P.hd * 2, P.hw + 0.05, 0]]) {
+      const r = new THREE.Mesh(new THREE.BoxGeometry(w, 0.03, d), this.pocketRimMat);
+      r.position.set(P.x + x, 0.012, P.z + z); g.add(r);
+    }
     // Front lip
     const chrome = new THREE.MeshStandardMaterial({ color: 0xf0f0f4, metalness: 1, roughness: 0.12 });
     const lip = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, W * 2 + 0.2, 16), chrome);
@@ -282,7 +313,7 @@ export class Stage {
     const size = this.renderer.getSize(new THREE.Vector2());
     this.composer = new EffectComposer(this.renderer);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(size.x / 2, size.y / 2), 0.45, 0.4, 0.97);
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(size.x / 2, size.y / 2), 0.3, 0.4, 0.97);
     this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
   }
@@ -350,6 +381,14 @@ export class Stage {
     const t = this.time;
     if (st.pusherZ !== undefined) this.pusher.position.set(0, L.pusherH / 2, st.pusherZ);
     if (st.guardY !== undefined) for (const g of this.guards) g.position.y = st.guardY - 0.2;
+    if (st.lidY !== undefined) this.lid.position.y = st.lidY + 0.45;
+    if (this.pocketRimMat) this.pocketRimMat.color.set(st.pocketOpen ? (Math.floor(t * 8) % 2 ? '#ffffff' : this.theme.accent) : this.theme.accent).multiplyScalar(st.pocketOpen ? 1.5 : 0.5);
+    this.bonus.visible = this.bonusLip.visible = !!st.bonusOn;
+    if (st.bonusOn) {
+      this.bonus.position.x = this.bonusLip.position.x = st.bonusX;
+      this.bonus.scale.x = this.bonusLip.scale.x = st.bonusHalf * 2;
+      this.bonusMat.opacity = 0.35 + Math.sin(t * 10) * 0.15;
+    }
     this.guardMat.emissiveIntensity = 1.2 + Math.sin(t * 6) * 0.5;
     // launcher
     this.launcher.position.x += (st.launcherX - this.launcher.position.x) * Math.min(1, dt * 18);
@@ -419,13 +458,13 @@ function makeEnvScene(theme) {
     const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(k), side: THREE.DoubleSide }));
     m.position.set(x, y, z); m.lookAt(0, lookY, 0); sc.add(m);
   };
-  box(34, 12, 0, 22, 2, '#ffffff', 3);          // ceiling softbox
-  box(20, 6, 0, 18, -14, '#ffffff', 2.5);       // back-top softbox
-  box(10, 4, -14, 14, 14, theme.light, 3);      // key softboxes
-  box(10, 4, 14, 14, 14, theme.light, 3);
+  box(34, 12, 0, 22, 2, '#ffffff', 2);          // ceiling softbox
+  box(20, 6, 0, 18, -14, '#ffffff', 1.6);       // back-top softbox
+  box(10, 4, -14, 14, 14, theme.light, 2);      // key softboxes
+  box(10, 4, 14, 14, 14, theme.light, 2);
   box(4, 18, -26, 8, -6, theme.led[0], 2.2);    // colored side strips
   box(4, 18, 26, 8, -6, theme.led[1 % theme.led.length], 2.2);
-  box(40, 8, 0, 8, 28, '#ffffff', 1.6);         // front fill
+  box(40, 8, 0, 8, 28, '#ffffff', 1.0);         // front fill
   box(30, 6, 0, 4, -28, theme.accent, 0.8);     // back glow
   return sc;
 }

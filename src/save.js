@@ -9,10 +9,11 @@ export const DEFAULT_SETTINGS = {
   lang: 'auto',
   quality: 'auto', resScale: 1, shadows: true, shadowRes: 2048, bloom: true, reflections: true, particles: 1, maxFps: 0, showFps: false,
   tableSize: 'wide', coinDetail: 'high', camera: 'standard', fov: 42, shake: true, leds: true, antialias: true, theme: 'casino',
-  physHz: 60, maxObjects: 900, prefill: 520, worker: true,
+  coinReflect: 1, physHz: 60, maxObjects: 900, prefill: 520, worker: true, pauseOnMenu: true, ambience: 0.25,
   master: 0.8, bgm: 0.45, se: 0.8, muteHidden: true,
   autoDrop: false, autoMode: 'follow', holdRepeat: true, vibrate: true, leftHand: false, uiScale: 1, dropButton: true, showBeam: true,
   f_slot: true, f_jp: true, f_items: true, f_fever: true, f_walls: true, f_combo: true, f_missions: true, f_achievePopups: true,
+  f_sugoroku: true, f_events: true, f_plinko: true, f_bonusZone: true, f_croon: true,
   f_regen: true, f_login: true, f_gems: true, f_floatText: true, f_hints: true, sideLoss: true, difficulty: 'normal', slotFast: false, jpSkip: true,
   reduceMotion: false, highContrast: false, cbSymbols: false,
 };

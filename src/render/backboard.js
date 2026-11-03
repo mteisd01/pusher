@@ -197,9 +197,15 @@ export class Backboard {
     if (fx.walls > 0) left.push(['WALL', '#4fc3ff'], [`${Math.ceil(fx.walls)}s`, '#fff', 30]);
     if (fx.turbo > 0) right.push(['TURBO', '#ff9f43'], [`${Math.ceil(fx.turbo)}s`, '#fff', 30]);
     if (fx.double > 0) right.push(['×2', '#c38bff', 30], [`${Math.ceil(fx.double)}s`, '#fff', 30]);
+    if (fx.magnet > 0) right.push(['MAGNET', '#ff6b6b', 20], [`${Math.ceil(fx.magnet)}s`, '#fff', 30]);
+    if (st.event) {
+      const ev = st.event;
+      const lines = [['EVENT', '#ff8a65'], [`${Math.ceil(ev.t)}s`, '#fff', 30]];
+      if (ev.id === 'challenge') lines.push([`${ev.progress || 0}/${ev.target}`, '#7CFFB2', 26]);
+      left.unshift(...lines);
+    }
     if (left.length) side(14, left.slice(0, 4));
     if (right.length) side(W - 134, right.slice(0, 4));
-    if (!left.length && !right.length && st.combo > 2) side(W - 134, [['COMBO', '#ffd34d'], [String(st.combo), '#fff', 40]]);
     // message overlay
     if (this.msg) {
       const m = this.msg, k = 1 - m.t / m.dur;

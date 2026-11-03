@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { L, KIND, TOKEN_COUNT } from '../core/layout.js';
+import { L, KIND, TOKEN_COUNT, GIANT } from '../core/layout.js';
 import { makeCoinGeometry, makeGemGeometry } from './coinGeometry.js';
 import { makeCoinFace, makeCoinEdge, makeTokenFace, makeBallTexture, makeChestTexture } from './textures.js';
 
@@ -10,10 +10,14 @@ export const TOKEN_STYLE = [
   { color: '#9b4dff', icon: 'x2', label: 'DOUBLE' },
   { color: '#ff2d6f', icon: '777', label: 'FEVER' },
   { color: '#16c6c6', icon: '+4', label: 'STOCK' },
+  { color: '#e0b000', icon: 'PLK', label: 'PLINKO' },
+  { color: '#8d6e63', icon: 'D6', label: 'DICE' },
+  { color: '#d32f2f', icon: 'MAG', label: 'MAGNET' },
+  { color: '#37474f', icon: 'BOM', label: 'BOMB' },
 ];
 export const GEM_COLORS = ['#ff1744', '#2979ff', '#00e676', '#ffc400', '#d500f9', '#e8f6ff'];
 
-const CAP = { [KIND.SILVER]: 1400, [KIND.GOLD]: 500, [KIND.RAINBOW]: 120, [KIND.BIG]: 60, [KIND.BALL]: 16, [KIND.GEM]: 60, [KIND.CHEST]: 30 };
+const CAP = { [KIND.SILVER]: 1400, [KIND.GOLD]: 500, [KIND.RAINBOW]: 120, [KIND.BIG]: 60, [KIND.BALL]: 16, [KIND.GEM]: 60, [KIND.CHEST]: 30, [KIND.GIANT]: 6 };
 
 export class CoinRenderer {
   constructor(scene, quality = 'high') {
@@ -40,23 +44,25 @@ export class CoinRenderer {
       gold: makeCoinFace('gold', texSize),
       rainbow: makeCoinFace('rainbow', texSize),
       big: makeCoinFace('big', texSize),
+      giant: makeCoinFace('giant', 1024),
       token: makeCoinFace('token', 512),
     };
     const metal = (face, color, side, extra = {}) => [
-      new THREE.MeshStandardMaterial({ color, metalness: 1, roughness: 1, map: face.map, normalMap: face.normalMap, roughnessMap: face.roughnessMap, envMapIntensity: 1.0, ...extra }),
-      new THREE.MeshStandardMaterial({ color, metalness: 1, roughness: 0.42, normalMap: side.normalMap, normalScale: new THREE.Vector2(1, 1), envMapIntensity: 1.0, ...extra }),
+      new THREE.MeshStandardMaterial({ color, metalness: 1, roughness: 1, map: face.map, normalMap: face.normalMap, roughnessMap: face.roughnessMap, envMapIntensity: 0.75, ...extra }),
+      new THREE.MeshStandardMaterial({ color, metalness: 1, roughness: 0.48, normalMap: side.normalMap, normalScale: new THREE.Vector2(1, 1), envMapIntensity: 0.75, ...extra }),
     ];
     const silverMats = metal(this.faces.silver, '#dfe3e8', edge);
     const goldMats = metal(this.faces.gold, '#ffc84a', edge);
     const rainbowMats = [
-      new THREE.MeshPhysicalMaterial({ color: '#f4f4ff', metalness: 1, roughness: 1, map: this.faces.rainbow.map, normalMap: this.faces.rainbow.normalMap, roughnessMap: this.faces.rainbow.roughnessMap, iridescence: 1, iridescenceIOR: 1.8, iridescenceThicknessMinimum: 200, iridescenceThicknessMaximum: 900 }),
-      new THREE.MeshPhysicalMaterial({ color: '#f4f4ff', metalness: 1, roughness: 0.3, normalMap: edge.normalMap, iridescence: 1, iridescenceIOR: 1.8, iridescenceThicknessMinimum: 200, iridescenceThicknessMaximum: 900 }),
+      new THREE.MeshPhysicalMaterial({ color: '#f4f4ff', metalness: 1, roughness: 1, map: this.faces.rainbow.map, normalMap: this.faces.rainbow.normalMap, roughnessMap: this.faces.rainbow.roughnessMap, iridescence: 1, iridescenceIOR: 1.8, iridescenceThicknessMinimum: 200, iridescenceThicknessMaximum: 900, envMapIntensity: 0.8 }),
+      new THREE.MeshPhysicalMaterial({ color: '#f4f4ff', metalness: 1, roughness: 0.36, envMapIntensity: 0.8, normalMap: edge.normalMap, iridescence: 1, iridescenceIOR: 1.8, iridescenceThicknessMinimum: 200, iridescenceThicknessMaximum: 900 }),
     ];
     const bigMats = metal(this.faces.big, '#f0c060', edgeBig);
     this._inst(KIND.SILVER, coinGeo, silverMats, hi);
     this._inst(KIND.GOLD, coinGeo, goldMats, hi);
     this._inst(KIND.RAINBOW, coinGeo, rainbowMats, hi);
     this._inst(KIND.BIG, bigGeo, bigMats, true);
+    this._inst(KIND.GIANT, makeCoinGeometry(GIANT.r, GIANT.hh, 0.07, 64, 3), metal(this.faces.giant, '#ffd27a', makeCoinEdge(260)), true);
     // Tokens: one mesh per subtype
     for (let i = 0; i < TOKEN_COUNT; i++) {
       const st = TOKEN_STYLE[i];
@@ -80,6 +86,16 @@ export class CoinRenderer {
     const chestMat = new THREE.MeshStandardMaterial({ map: chestTex, metalness: 0.25, roughness: 0.55 });
     this._inst(KIND.CHEST, new THREE.BoxGeometry(1.1, 0.8, 0.8), chestMat, true);
     this.gemColors = GEM_COLORS.map(c => new THREE.Color(c));
+  }
+
+  // user-adjustable reflection strength (1 = default)
+  setReflection(k) {
+    this.reflK = k;
+    const all = [...Object.values(this.meshes), ...this.tokenMeshes];
+    for (const m of all) for (const mat of (Array.isArray(m.material) ? m.material : [m.material])) {
+      if (mat.userData.baseEnv === undefined) mat.userData.baseEnv = mat.envMapIntensity;
+      mat.envMapIntensity = mat.userData.baseEnv * k;
+    }
   }
 
   _inst(kind, geo, mat, receive) {

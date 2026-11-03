@@ -4,6 +4,7 @@ import { L, KIND, TOKEN } from '../core/layout.js';
 import { B, ITEM_TABLE, ROULETTE, UPGRADES, upgradeCost } from './balance.js';
 import { Progression } from './progression.js';
 import { Slot } from './slot.js';
+import { Features } from './features.js';
 import { themeById, THEMES } from '../render/themes.js';
 import { t } from '../i18n.js';
 
@@ -32,13 +33,28 @@ export class Game {
     this.lastNoCoinToast = 0;
     this.sessionStart = performance.now();
     this.wallsSent = null; this.speedSent = null;
+    this.pauseReasons = new Set();
+    this.strokeCoins = 0;
+    this.features = new Features(this);
+  }
+
+  get paused() { return this.pauseReasons.size > 0; }
+  setPause(reason, on) {
+    const was = this.paused;
+    if (on) this.pauseReasons.add(reason); else this.pauseReasons.delete(reason);
+    if (was !== this.paused) {
+      this.holding = false;
+      this.audio.setPaused && this.audio.setPaused(this.paused);
+      this.ui.onPauseChange && this.ui.onPauseChange(this.paused, this.pauseReasons.has('user'));
+    }
   }
 
   get settings() { return this.save.settings; }
   get diff() { return B.difficulty[this.settings.difficulty] || B.difficulty.normal; }
   upg(id) { return this.prog.upg(id); }
   stockMax() { return B.stockBase + this.upg('stock'); }
-  gateHalf() { return (B.gate.half + B.gate.halfPerLv * this.upg('gate')) * this.diff.gate * (this.fx.fever > 0 ? 1.8 : 1); }
+  gateHalf() { return (B.gate.half + B.gate.halfPerLv * this.upg('gate')) * this.diff.gate * (this.fx.fever > 0 ? 1.6 : 1) * this.features.gateMult(); }
+  get overlayBusy() { return this.features.busy || this.roulette.active || this.jpRunning; }
   slotLuck() { return (1 + 0.06 * this.upg('luck') + this.prog.gemLuck()) * this.diff.slot * (this.fx.fever > 0 ? 1.4 : 1); }
   itemRate() { return (B.itemRate + B.itemRatePerLv * this.upg('item')) * this.diff.item; }
   autoRate() { return B.autoRateBase + B.autoRatePerLv * this.upg('auto'); }
@@ -71,6 +87,7 @@ export class Game {
   // ---------- input ----------
   setAim(x) { this.aimX = Math.max(-(L.halfW - 0.7), Math.min(L.halfW - 0.7, x)); }
   press(x) {
+    if (this.paused || this.overlayBusy) return;
     if (x !== undefined) this.setAim(x);
     this.launcherX = this.aimX;
     this.drop();
@@ -89,7 +106,7 @@ export class Game {
       this.save.coins -= B.dropCost;
       const off = n > 1 ? (i - (n - 1) / 2) * 0.75 : 0;
       const x = Math.max(-(L.halfW - 0.6), Math.min(L.halfW - 0.6, this.launcherX + off + rand(-0.08, 0.08)));
-      const gold = (this.fx.fever > 0 && Math.random() < B.fever.goldChance) || Math.random() < B.goldRatePerLv * this.upg('gold');
+      const gold = this.features.goldRush() || (this.fx.fever > 0 && Math.random() < B.fever.goldChance) || Math.random() < B.goldRatePerLv * this.upg('gold');
       this.physics.cmd('spawn', gold ? KIND.GOLD : KIND.SILVER, x, L.dropY - 0.1, L.dropZ + rand(-0.15, 0.15), tiltQ(0.25), { x: rand(-0.2, 0.2), y: -2.5, z: rand(-0.1, 0.25) }, 0, 1);
       k++;
     }
@@ -97,7 +114,7 @@ export class Game {
       if (this.time - this.lastNoCoinToast > 3) { this.lastNoCoinToast = this.time; this.toast('🪙', t('outOfCoins')); }
       return;
     }
-    this.audio.drop();
+    this.audio.drop(this.launcherX / L.halfW * 0.8);
     this.vibrate(8);
     this.prog.add('dropped', k);
     this.prog.addXp(k);
@@ -161,12 +178,10 @@ export class Game {
     this.physMs = msg.ms;
     for (const e of msg.ev) {
       if (e.t === 'out') this._onOut(e);
+      else if (e.t === 'stroke') this._onStroke();
       else if (e.t === 'gate') this._onGate(e);
-      else if (e.t === 'hit') {
-        const pan = e.x / L.halfW * 0.7;
-        if (e.kind === KIND.BALL) this.audio.thud(e.s, pan);
-        else this.audio.clink(e.s * (e.kind === KIND.BIG ? 1 : 0.7), e.kind === KIND.BIG ? 0.6 : 1, pan);
-      }
+      else if (e.t === 'hit') this.audio.impact(e, L.halfW);
+      else if (e.t === 'mv') this.motion = e.v;
     }
   }
 
@@ -174,6 +189,7 @@ export class Game {
     if (!this.settings.f_slot) return;
     if (Math.abs(e.x - this.gateX) > this.gateHalf()) return;
     this.prog.add('gatePasses');
+    this.features.onGatePass();
     this.gateFlash = 1;
     this.effects.burst(e.x, L.gateY, L.dropZ, this.theme().accent, 10, 3, 0.5, 0.5);
     if (this.save.stock < this.stockMax()) {
@@ -187,6 +203,7 @@ export class Game {
 
   _onOut(e) {
     const s = this.settings;
+    if (e.pocket && s.f_bonusZone) { this.features.onPocket(e); return; }
     if (!e.won) {
       this.prog.add('lost');
       if (e.kind >= KIND.BALL) { this.toast('💨', t('lostItem')); this.audio.lost(); }
@@ -195,17 +212,19 @@ export class Game {
     const mult = this.fx.double > 0 ? 2 : 1;
     const fxPos = [e.x, 0.2, L.frontZ + 0.2];
     switch (e.kind) {
-      case KIND.SILVER: case KIND.GOLD: case KIND.RAINBOW: case KIND.BIG: {
-        const v = B.value[e.kind] * mult;
+      case KIND.SILVER: case KIND.GOLD: case KIND.RAINBOW: case KIND.BIG: case KIND.GIANT: {
+        const zone = this.features.inBonusZone(e.x);
+        const v = B.value[e.kind] * mult * (zone && e.kind !== KIND.SILVER ? 2 : 1);
         this.credit(v, 'win');
-        if (s.f_slot && Math.abs(e.x) < 1.6 && Math.random() < 0.12 && this.save.stock < this.stockMax()) {
-          this.save.stock++; this.audio.gate();
-          this.ui.popup(t('chance'), e.x, 1.2, L.frontZ, '#7CFFB2', 1.4);
+        if (zone && Math.random() < 0.18) {
+          if (s.f_slot && this.save.stock < this.stockMax()) { this.save.stock++; this.ui.popup('+1 STOCK', e.x, 1.2, L.frontZ, '#7CFFB2', 1.3); }
+          else if (s.f_sugoroku) { this.features.addDice(1); this.ui.popup('+1 DICE', e.x, 1.2, L.frontZ, '#ffd34d', 1.3); }
+          this.audio.gate();
         }
         this.prog.addXp(e.kind === KIND.SILVER ? 0 : Math.ceil(v / 5));
-        this._combo(v);
+        this.strokeCoins += 1;
         this._pop(v, e.x, e.kind);
-        this.audio.payout(e.kind === KIND.SILVER ? 1 : 3, e.x / L.halfW);
+        this.audio.payout(e.kind === KIND.SILVER ? 1 : 3, e.x / L.halfW * 0.8, e.kind === KIND.BIG || e.kind === KIND.GIANT);
         const col = e.kind === KIND.GOLD ? '#ffcc33' : e.kind === KIND.RAINBOW ? `hsl(${Math.random() * 360},100%,60%)` : e.kind === KIND.BIG ? '#ffd34d' : '#e8f0ff';
         this.effects.burst(...fxPos, col, e.kind === KIND.SILVER ? 4 : 14, 3, e.kind === KIND.SILVER ? 0.35 : 0.6, 0.6);
         this.payoutFlash += e.kind === KIND.SILVER ? 0.15 : 0.6;
@@ -253,24 +272,20 @@ export class Game {
     if (a.t <= 0) a.t = 0.25;
   }
 
-  _combo(v) {
-    if (!this.settings.f_combo) return;
-    this.combo += 1;
-    this.comboTimer = B.combo.window;
-    this.prog.max('maxCombo', this.combo);
-    this.prog.checkMissions('combo', this.combo);
-    for (const [n, bonus] of B.combo.steps) {
-      if (this.combo === n && this.comboPaid < n) {
-        this.comboPaid = n;
-        this.credit(bonus, 'combo');
-        this.ui.banner(`${n} COMBO! +${bonus}`, '#ffd34d');
-        this.audio.combo(n);
-        this.stage.addShake(0.15);
-      }
-    }
-    if (this.combo > B.combo.steps[B.combo.steps.length - 1][0] && this.combo % 25 === 0) {
-      this.credit(150, 'combo'); this.ui.banner(`${this.combo} COMBO! +150`, 'rainbow');
-    }
+  // "Push combo": coins won during a single pusher stroke
+  _onStroke() {
+    const n = this.strokeCoins;
+    this.strokeCoins = 0;
+    this.combo = n;
+    if (!this.settings.f_combo || n < B.combo.steps[0][0]) return;
+    this.prog.max('maxCombo', n);
+    this.prog.checkMissions('combo', n);
+    let bonus = 0;
+    for (const [k, b] of B.combo.steps) if (n >= k) bonus = b;
+    this.credit(bonus, 'combo');
+    this.ui.banner(`PUSH COMBO ${n}! +${bonus}`, n >= 40 ? 'rainbow' : '#ffd34d');
+    this.audio.combo(n);
+    this.stage.addShake(0.12);
   }
 
   activateToken(tok) {
@@ -289,6 +304,19 @@ export class Game {
       case TOKEN.DOUBLE: this.fx.double += B.double.dur; break;
       case TOKEN.FEVER: if (s.f_fever) this.startFever(); else this.shower(30); break;
       case TOKEN.STOCK: this.save.stock = this.stockMax(); break;
+      case TOKEN.PLINKO: if (s.f_plinko) this.features.enqueue(() => this.features.plinko()); else this.shower(12); break;
+      case TOKEN.DICE: if (s.f_sugoroku) this.features.addDice(2); else this.shower(8); break;
+      case TOKEN.MAGNET: this.fx.magnet = (this.fx.magnet || 0) + 12; break;
+      case TOKEN.BOMB: {
+        const x = rand(-L.halfW + 3, L.halfW - 3), z = rand(1, L.frontZ - 2.5);
+        setTimeout(() => {
+          this.physics.cmd('blast', x, z, 3.2, 7);
+          this.effects.burst(x, 0.5, z, '#ff9e1b', 60, 9, 1, 0.9);
+          this.stage.addShake(0.7); this.audio.thump(0, 0.9, 60); this.audio.noiseHit(0, 0.5, 'lowpass', 1200, 0.5);
+          this.vibrate(60);
+        }, 700);
+        break;
+      }
     }
   }
 
@@ -307,7 +335,7 @@ export class Game {
   }
 
   // ---------- slot callbacks ----------
-  onSlotStart() { this.prog.add('slotSpins'); }
+  onSlotStart() { this.prog.add('slotSpins'); this.audio.reelStart && this.audio.reelStart(); }
   onReach() { this.backboard.message(t('reach'), '#ff4060', 1.4, 110); this.audio.reach(); }
   onSlotResult(o) {
     if (!o) { this.audio.lose(); return; }
@@ -324,11 +352,12 @@ export class Game {
       case 'ball': this.spawnItem(KIND.BALL); this.backboard.message('JP BALL!', '#ffd34d', 2, 100); this.audio.winBig(); break;
       case 'shower':
         this.shower(o.shower);
+        if (o.dice) this.features.addDice(o.dice);
         this.backboard.message(o.shower >= 20 ? t('bigWin') : `+${o.shower}`, '#fff200', 1.6, o.shower >= 20 ? 110 : 120);
-        o.shower >= 20 ? this.audio.winBig() : this.audio.winSmall();
+        o.shower >= 10 ? this.audio.win('bar') : this.audio.win(o.sym === 2 ? 'bell' : 'cherry');
         break;
-      case 'item': if (s.f_items) this.spawnRandomItem(); else this.shower(8); this.backboard.message('ITEM!', '#7fe7ff', 1.6, 120); this.audio.winSmall(); break;
-      case 'gold': this.shower(o.n, KIND.GOLD); this.backboard.message('GOLD!', '#ffcc33', 1.6, 120); this.audio.winSmall(); break;
+      case 'item': if (s.f_items) this.spawnRandomItem(); else this.shower(8); this.backboard.message('ITEM!', '#7fe7ff', 1.6, 120); this.audio.win('item'); break;
+      case 'gold': this.shower(o.n, KIND.GOLD); this.backboard.message('GOLD!', '#ffcc33', 1.6, 120); this.audio.win('gold'); break;
       case 'rainbow': this.shower(o.n, KIND.RAINBOW); this.backboard.message('RAINBOW!', 'rainbow', 2, 110); this.audio.winBig(); break;
     }
     if (o.kind === 'fever' || o.kind === 'ball' || o.kind === 'rainbow') { this.effects.confetti(50); this.stage.addShake(0.3); }
@@ -342,27 +371,15 @@ export class Game {
     this.prog.add('jpLottery');
     let idx = Math.floor(Math.random() * ROULETTE.length);
     if (Math.random() < 0.02 * this.upg('jp') + 0.01 * this.upg('luck')) idx = 0;
+    if (this.settings.f_croon) {
+      this.jpRunning = false;
+      this.features.enqueue(() => this.features.croon());
+      return;
+    }
     const res = await this.roulette.run(idx, this.save.jpPool, this.settings.jpSkip, t('jpChance'));
     this.jpRunning = false;
     switch (res.id) {
-      case 'JP': {
-        const pool = Math.floor(this.save.jpPool);
-        this.save.jpPool = this.jpBase();
-        this.prog.add('jpWins');
-        this.prog.max('biggestWin', pool);
-        let rest = pool;
-        const bigs = Math.min(8, Math.floor(rest * 0.4 / 30));
-        this.shower(bigs, KIND.BIG); rest -= bigs * 30;
-        const sil = Math.min(B.maxShowerPhysical, rest); this.shower(sil); rest -= sil;
-        if (rest > 0) this.credit(rest, 'jp');
-        this.backboard.message('JACKPOT!!', 'rainbow', 4, 110);
-        this.ui.banner(`JACKPOT!! ${pool.toLocaleString()}`, 'rainbow', 3.5);
-        this.audio.jackpot();
-        this.effects.confetti(300);
-        this.stage.addShake(1);
-        this.vibrate([60, 40, 60, 40, 120]);
-        break;
-      }
+      case 'JP': this.payJackpot(); break;
       case 'c': {
         const n = res.n;
         this.shower(Math.min(60, n)); if (n > 60) this.credit(n - 60, 'jp');
@@ -374,6 +391,24 @@ export class Game {
       case 'BIG': this.shower(3, KIND.BIG); this.ui.banner(t('bigMedal') + ' ×3', '#ffd34d'); this.audio.winBig(); break;
       case 'WALL': this.activateToken(TOKEN.WALL); break;
     }
+  }
+
+  payJackpot() {
+    const pool = Math.floor(this.save.jpPool);
+    this.save.jpPool = this.jpBase();
+    this.prog.add('jpWins');
+    this.prog.max('biggestWin', pool);
+    let rest = pool;
+    const bigs = Math.min(8, Math.floor(rest * 0.4 / 30));
+    this.shower(bigs, KIND.BIG); rest -= bigs * 30;
+    const sil = Math.min(B.maxShowerPhysical, rest); this.shower(sil); rest -= sil;
+    if (rest > 0) this.credit(rest, 'jp');
+    this.backboard.message('JACKPOT!!', 'rainbow', 4, 110);
+    this.ui.banner(`JACKPOT!! ${pool.toLocaleString()}`, 'rainbow', 3.5);
+    this.audio.jackpot();
+    this.effects.confetti(300);
+    this.stage.addShake(1);
+    this.vibrate([60, 40, 60, 40, 120]);
   }
 
   onLevelUp(lv, reward) {
@@ -405,6 +440,12 @@ export class Game {
     return true;
   }
 
+  gateXAt(time) {
+    const range = Math.min(B.gate.range, L.halfW - 2);
+    const w = Math.PI * 2 / B.gate.period;
+    return Math.sin(time * w + Math.sin(time * w * 0.37) * 0.9) * range;
+  }
+
   // ---------- main update ----------
   update(dt) {
     this.time += dt;
@@ -413,14 +454,15 @@ export class Game {
     for (const k in this.fx) if (this.fx[k] > 0) { this.fx[k] = Math.max(0, this.fx[k] - dt); if (k === 'fever' && this.fx.fever === 0) this.audio.fever = false; }
     const walls = this.fx.walls > 0 || !s.sideLoss;
     if (walls !== this.wallsSent) { this.physics.cmd('walls', walls); this.wallsSent = walls; }
-    const speed = (this.fx.turbo > 0 ? B.turbo.speed : 1) * (this.fx.fever > 0 ? 1.15 : 1);
+    const speed = (this.fx.turbo > 0 ? B.turbo.speed : 1) * (this.fx.fever > 0 ? 1.15 : 1) * this.features.speedMult();
     if (speed !== this.speedSent) { this.physics.cmd('speed', speed); this.speedSent = speed; }
-    // gate motion
-    const range = Math.min(B.gate.range, L.halfW - 2);
-    this.gateX = Math.sin(this.time * Math.PI * 2 / B.gate.period) * range;
+    const mag = this.fx.magnet > 0;
+    if (mag !== this.magSent) { this.physics.cmd('magnet', mag); this.magSent = mag; }
+    // gate motion (speed wobbles so that timing matters)
+    this.gateX = this.gateXAt(this.time);
     this.gateFlash = Math.max(0, this.gateFlash - dt * 2.5);
     // input repeat
-    if (!this.jpRunning) {
+    if (!this.overlayBusy) {
       if (this.holding && s.holdRepeat) {
         this.holdTimer += dt;
         this.launcherX = this.aimX;
@@ -438,8 +480,6 @@ export class Game {
         }
       } else this.launcherX = this.aimX;
     }
-    // combo decay
-    if (this.comboTimer > 0) { this.comboTimer -= dt; if (this.comboTimer <= 0) { this.combo = 0; this.comboPaid = 0; } }
     // popup aggregation
     const a = this.popAgg;
     if (a.t > 0) { a.t -= dt; if (a.t <= 0 && a.n > 0) { this.ui.popup(`+${a.n}`, a.x, 0.3, L.frontZ, '#fff', 1); a.n = 0; } }
@@ -450,7 +490,9 @@ export class Game {
     } else this.save.regenAcc = 0;
     this._processShower(dt);
     if (s.f_slot) this.slot.update(dt);
-    if (this.jpQueue > 0 && !this.jpRunning && !this.roulette.active) this._runJackpot();
+    if (this.jpQueue > 0 && !this.overlayBusy && !this.features.queue.length) this._runJackpot();
+    this.features.update(dt);
+    this.audio.pileMotion && this.audio.pileMotion(this.motion || 0, dt);
     this.prog.add('playTime', dt);
     this._missionTimer = (this._missionTimer || 0) + dt;
     if (this._missionTimer > 30) { this._missionTimer = 0; this.prog.ensureMissions(); }
@@ -460,7 +502,8 @@ export class Game {
 
   lightMode() {
     if (this.fx.fever > 0) return 'fever';
-    if (this.slot.flash > 0 || this.jpRunning) return 'win';
+    if (this.slot.flash > 0 || this.overlayBusy) return 'win';
+    if (this.features.event) return 'fever';
     if (this.slot.spinning) return 'spin';
     return 'idle';
   }

@@ -4,6 +4,7 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import { PusherPhysics } from '../src/core/physics.js';
 import { L, KIND, configureLayout } from '../src/core/layout.js';
 configureLayout(process.env.SIZE || 'wide');
+if (process.env.SWE) L.sideWallEnd = +process.env.SWE;
 await RAPIER.init();
 const [secs, pre, rate, stroke, walls, warm] = [300, 420, 2, 0, 0, 60].map((d, i) => process.argv[2 + i] !== undefined ? +process.argv[2 + i] : d);
 const p = new PusherPhysics(RAPIER, { hz: 60, iterations: 2 });

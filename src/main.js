@@ -9,6 +9,7 @@ import { L, configureLayout } from './core/layout.js';
 import { Game } from './game/game.js';
 import { UI } from './ui/ui.js';
 import { Roulette } from './ui/roulette.js';
+import { MiniGames } from './ui/minigames.js';
 import { themeById } from './render/themes.js';
 import { setLang, t } from './i18n.js';
 import { loadSave, storeSave, loadBoard, storeBoard, clearBoard, exportCode, importCode, backup, wipeAll, newSave, QUALITY_PRESETS, detectQuality, decodeBoard } from './save.js';
@@ -74,7 +75,8 @@ async function boot() {
     onToggleMute: () => { muted = !muted; audio.setMuted(muted); document.getElementById('bMute').innerHTML = muted ? MUTE_SVG : SOUND_SVG; },
   });
   const roulette = new Roulette(uiRoot, audio);
-  game = new Game({ stage, coins, backboard, effects, audio, physics, ui, save, roulette });
+  const mini = new MiniGames(uiRoot, audio, () => s);
+  game = new Game({ stage, coins, backboard, effects, audio, physics, ui, save, roulette, mini });
   ui.bind(game);
   physics.onFrame = msg => game.onPhysicsFrame(msg);
   let muted = false;
@@ -82,6 +84,7 @@ async function boot() {
   const MUTE_SVG = '<svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"/><path d="M16 9l5 6M21 9l-5 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
 
   stage.applyQuality(s);
+  coins.setReflection(s.coinReflect);
   coins.setShadows(!!s.shadows, s.coinDetail === 'high' || s.coinDetail === 'ultra');
   ui.checkOrientation();
 
@@ -101,12 +104,15 @@ async function boot() {
       case 'quality':
         if (st.quality === 'custom') break;
         Object.assign(st, QUALITY_PRESETS[st.quality === 'auto' ? detectQuality() : st.quality]);
-        coins.build(st.coinDetail);
+        coins.build(st.coinDetail); coins.setReflection(st.coinReflect);
         coins.setShadows(!!st.shadows, st.coinDetail === 'high' || st.coinDetail === 'ultra');
         stage.applyQuality(st); effects.amount = st.particles;
         physics.cmd('hz', st.physHz);
         break;
-      case 'coinDetail': coins.build(st.coinDetail); coins.setShadows(!!st.shadows, st.coinDetail === 'high' || st.coinDetail === 'ultra'); break;
+      case 'coinReflect': coins.setReflection(st.coinReflect); break;
+      case 'pauseOnMenu': game.setPause('menu', !!st.pauseOnMenu && ui.isOpen()); break;
+      case 'ambience': audio.setVolume({ ambience: st.ambience }); break;
+      case 'coinDetail': coins.build(st.coinDetail); coins.setReflection(st.coinReflect); coins.setShadows(!!st.shadows, st.coinDetail === 'high' || st.coinDetail === 'ultra'); break;
       case 'resScale': case 'shadows': case 'shadowRes': case 'bloom': case 'reflections': case 'fov': case 'camera':
         stage.applyQuality(st); coins.setShadows(!!st.shadows, st.coinDetail === 'high' || st.coinDetail === 'ultra'); break;
       case 'particles': effects.amount = st.particles; break;
@@ -141,8 +147,8 @@ async function boot() {
   function persist() { storeSave(save); lastSave = performance.now(); }
   async function persistBoard() { const snap = await physics.snapshot(); storeBoard(snap, s.tableSize); lastBoard = performance.now(); }
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) { persist(); persistBoard(); if (s.muteHidden) audio.setMuted(true); game.release(); }
-    else { audio.setMuted(muted); last = performance.now(); }
+    if (document.hidden) { persist(); persistBoard(); if (s.muteHidden) audio.setMuted(true); game.setPause('hidden', true); }
+    else { audio.setMuted(muted); game.setPause('hidden', false); last = performance.now(); }
   });
   window.addEventListener('pagehide', () => persist());
 
@@ -162,7 +168,7 @@ async function boot() {
   let pinch0 = 0, zoom0 = 0;
   canvas.addEventListener('pointerdown', e => {
     audio.unlock();
-    if (roulette.active || ui.isOpen()) return;
+    if (roulette.active || mini.active || ui.isOpen()) return;
     canvas.setPointerCapture(e.pointerId);
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (pointers.size === 2) {
@@ -193,8 +199,10 @@ async function boot() {
   window.addEventListener('keydown', e => {
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
     audio.unlock();
-    if (e.code === 'Escape') { ui.isOpen() ? ui.close() : ui.open('shop'); return; }
-    if (ui.isOpen() || roulette.active) return;
+    if (e.code === 'Escape') { if (game.pauseReasons.has('user') && !ui.isOpen()) { ui.togglePause(false); return; } ui.isOpen() ? ui.close() : ui.open('shop'); return; }
+    if (e.code === 'KeyP' && !ui.isOpen()) { ui.togglePause(); return; }
+    if (e.code === 'F3') { e.preventDefault(); s.showFps = !s.showFps; ui.applyLayout(); return; }
+    if (ui.isOpen() || roulette.active || mini.active) return;
     if ((e.code === 'Space' || e.code === 'Enter') && !keys[e.code]) { keys[e.code] = true; game.press(); e.preventDefault(); }
     if (e.code === 'ArrowLeft' || e.code === 'KeyQ') { keys.left = true; e.preventDefault(); }
     if (e.code === 'ArrowRight' || e.code === 'KeyE') { keys.right = true; e.preventDefault(); }
@@ -202,7 +210,6 @@ async function boot() {
     if (e.code === 'KeyC') ui.o.onCycleCamera();
     if (e.code === 'KeyM') ui.o.onToggleMute();
     if (e.code === 'KeyF') toggleFullscreen();
-    if (e.code === 'KeyP') { s.showFps = !s.showFps; ui.applyLayout(); }
   });
   window.addEventListener('keyup', e => {
     if (e.code === 'Space' || e.code === 'Enter') { keys[e.code] = false; game.release(); }
@@ -243,29 +250,31 @@ async function boot() {
     } else last = now;
     dt = Math.min(dt, 0.1);
     fps = fps * 0.95 + (1 / Math.max(dt, 0.001)) * 0.05;
+    const paused = game.paused;
     if (keys.left) game.setAim(game.aimX - dt * 12);
     if (keys.right) game.setAim(game.aimX + dt * 12);
-    game.update(dt);
+    if (!paused) game.update(dt);
     // render latest physics state, then request next step (buffer is transferred)
     const buf = physics.buf;
-    let pz, gy;
+    let pz, gy, lidY;
     if (buf) {
-      coins.update(buf); pz = buf[1]; gy = buf[2];
+      coins.update(buf); pz = buf[1]; gy = buf[2]; lidY = buf[4];
+      if (!paused) audio.pusherDrive(buf[3]);
       sparkleAcc += dt;
       if (sparkleAcc > 0.12) { sparkleAcc = 0; emitSparkles(buf); }
     }
-    perfCheck(dt);
-    physics.tick(dt);
+    if (!paused) { perfCheck(dt); physics.tick(dt); }
     stage.update(dt, {
-      pusherZ: pz, guardY: gy, launcherX: game.launcherX, showBeam: s.showBeam,
+      pusherZ: pz, guardY: gy, lidY, pocketOpen: game.features.pocketOpen, bonusOn: s.f_bonusZone, bonusX: game.features.bonusX, bonusHalf: 1.0,
+      launcherX: game.launcherX, showBeam: s.showBeam,
       gateOn: s.f_slot, gateX: game.gateX, gateHalf: game.gateHalf(), gateFlash: game.gateFlash,
       lightMode: game.lightMode(), payoutFlash: game.payoutFlash > 0.1 ? game.payoutFlash : 0,
     });
     backboard.update(dt, {
       slot: game.slot, slotOn: s.f_slot, jpOn: s.f_jp, jpPool: save.jpPool, stock: save.stock, stockMax: game.stockMax(),
-      fever: game.fx.fever > 0, effects: game.fx, combo: game.combo, theme: game.theme(),
+      fever: game.fx.fever > 0, effects: game.fx, combo: game.combo, theme: game.theme(), event: game.features.event,
     });
-    effects.update(dt);
+    if (!paused) effects.update(dt);
     stage.render();
     ui.update(dt, { fps });
     if (now - lastSave > 15000) persist();
