@@ -18,10 +18,10 @@ export const DEFAULT_SETTINGS = {
 };
 
 export const QUALITY_PRESETS = {
-  low: { resScale: 0.7, shadows: false, shadowRes: 1024, bloom: false, reflections: true, particles: 0.4, coinDetail: 'low', maxObjects: 600, physHz: 60, antialias: false },
-  medium: { resScale: 0.85, shadows: true, shadowRes: 1024, bloom: false, reflections: true, particles: 0.7, coinDetail: 'medium', maxObjects: 750, physHz: 60 },
-  high: { resScale: 1, shadows: true, shadowRes: 2048, bloom: true, reflections: true, particles: 1, coinDetail: 'high', maxObjects: 900, physHz: 60 },
-  ultra: { resScale: 1, shadows: true, shadowRes: 4096, bloom: true, reflections: true, particles: 1.4, coinDetail: 'ultra', maxObjects: 1200, physHz: 90 },
+  low: { resScale: 0.7, shadows: false, shadowRes: 1024, bloom: false, reflections: true, particles: 0.4, coinDetail: 'low', maxObjects: 750, physHz: 60, antialias: false },
+  medium: { resScale: 0.85, shadows: true, shadowRes: 1024, bloom: false, reflections: true, particles: 0.7, coinDetail: 'medium', maxObjects: 850, physHz: 60 },
+  high: { resScale: 1, shadows: true, shadowRes: 2048, bloom: true, reflections: true, particles: 1, coinDetail: 'high', maxObjects: 1000, physHz: 60 },
+  ultra: { resScale: 1, shadows: true, shadowRes: 4096, bloom: true, reflections: true, particles: 1.4, coinDetail: 'ultra', maxObjects: 1400, physHz: 60 },
 };
 
 export function detectQuality() {

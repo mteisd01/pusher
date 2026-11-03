@@ -26,7 +26,7 @@ export class Stage {
     const r = this.renderer;
     r.outputColorSpace = THREE.SRGBColorSpace;
     r.toneMapping = THREE.ACESFilmicToneMapping;
-    r.toneMappingExposure = 1.0;
+    r.toneMappingExposure = 1.1;
     r.shadowMap.enabled = true;
     r.shadowMap.type = THREE.PCFShadowMap;
     this.scene = new THREE.Scene();
@@ -163,7 +163,7 @@ export class Stage {
     plate.repeat.set(8, 4);
     this.pusherTopMat.map = plate; this.pusherTopMat.color.set(theme.pusher); this.pusherTopMat.needsUpdate = true;
     // Field floor
-    const ftex = makeFieldTexture(theme);
+    const ftex = makeFieldTexture(theme, W);
     const floorMat = new THREE.MeshStandardMaterial({ map: ftex, metalness: 0.55, roughness: 0.42 });
     const fl = new THREE.Mesh(new THREE.PlaneGeometry(W * 2, L.frontZ - L.backWallZ), floorMat);
     fl.rotation.x = -Math.PI / 2; fl.position.set(0, 0, (L.frontZ + L.backWallZ) / 2);
@@ -413,18 +413,19 @@ export class Stage {
 // Dark studio with soft-box lights: gives metals contrasty, realistic reflections
 function makeEnvScene(theme) {
   const sc = new THREE.Scene();
-  const room = new THREE.Mesh(new THREE.BoxGeometry(60, 30, 60), new THREE.MeshBasicMaterial({ color: new THREE.Color(theme.bgTop).multiplyScalar(0.35), side: THREE.BackSide }));
+  const room = new THREE.Mesh(new THREE.BoxGeometry(60, 30, 60), new THREE.MeshBasicMaterial({ color: new THREE.Color(theme.bgTop).lerp(new THREE.Color('#3a3a44'), 0.6), side: THREE.BackSide }));
   room.position.y = 10; sc.add(room);
   const box = (w, h, x, y, z, color, k, lookY = 0) => {
     const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(k), side: THREE.DoubleSide }));
     m.position.set(x, y, z); m.lookAt(0, lookY, 0); sc.add(m);
   };
-  box(26, 8, 0, 22, 4, '#ffffff', 5);           // ceiling softbox
+  box(34, 12, 0, 22, 2, '#ffffff', 3);          // ceiling softbox
+  box(20, 6, 0, 18, -14, '#ffffff', 2.5);       // back-top softbox
   box(10, 4, -14, 14, 14, theme.light, 3);      // key softboxes
   box(10, 4, 14, 14, 14, theme.light, 3);
   box(4, 18, -26, 8, -6, theme.led[0], 2.2);    // colored side strips
   box(4, 18, 26, 8, -6, theme.led[1 % theme.led.length], 2.2);
-  box(30, 3, 0, 6, 28, '#ffffff', 1.2);         // front fill
+  box(40, 8, 0, 8, 28, '#ffffff', 1.6);         // front fill
   box(30, 6, 0, 4, -28, theme.accent, 0.8);     // back glow
   return sc;
 }

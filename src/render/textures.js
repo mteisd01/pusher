@@ -381,7 +381,7 @@ export function makeSurfaceTexture(kind, colorA, colorB, size = 512, seed = 1) {
 }
 
 // Field floor print: lanes, arrows and the CHANCE zone at the front edge
-export function makeFieldTexture(theme, w = 1024, h = 1024) {
+export function makeFieldTexture(theme, halfW = 11, w = 1024, h = 1024) {
   const c = canvas(w, h), g = c.getContext('2d');
   const grad = g.createLinearGradient(0, 0, 0, h);
   grad.addColorStop(0, theme.floorA); grad.addColorStop(1, theme.floorB);
@@ -403,6 +403,14 @@ export function makeFieldTexture(theme, w = 1024, h = 1024) {
     }
   }
   g.globalAlpha = 1;
+  // CHANCE zone at the front center (coins falling here may add slot stock)
+  const cw = w * 3.2 / (halfW * 2);
+  const cz = g.createLinearGradient(0, h * 0.86, 0, h);
+  cz.addColorStop(0, 'rgba(124,255,178,0)'); cz.addColorStop(1, 'rgba(124,255,178,0.55)');
+  g.fillStyle = cz; g.fillRect(w / 2 - cw / 2, h * 0.86, cw, h * 0.14);
+  g.strokeStyle = '#7CFFB2'; g.lineWidth = 4; g.setLineDash([12, 8]); g.strokeRect(w / 2 - cw / 2, h * 0.86, cw, h * 0.14 - 2); g.setLineDash([]);
+  g.fillStyle = '#eafff2'; g.font = '900 34px "Arial Black", Arial'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText('CHANCE', w / 2, h * 0.94);
   // center logo
   g.save(); g.translate(w / 2, h * 0.38); g.globalAlpha = 0.18; g.fillStyle = theme.floorLine;
   starPath(g, 0, 0, 120, 50); g.fill();

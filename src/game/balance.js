@@ -8,15 +8,15 @@ export const B = {
   autoRateBase: 1.6,          // drops / s
   autoRatePerLv: 0.45,
   value: { [KIND.SILVER]: 1, [KIND.GOLD]: 5, [KIND.RAINBOW]: 25, [KIND.BIG]: 30 },
-  gate: { half: 0.95, halfPerLv: 0.1, period: 4.6, range: 9.0 },
+  gate: { half: 0.78, halfPerLv: 0.09, period: 4.6, range: 9.0 },
   stockBase: 4,
   slotTime: 2.4,
-  fever: { dur: 30, durPerLv: 5 },
+  fever: { dur: 20, durPerLv: 4, goldChance: 0.5 },
   walls: { dur: 25, durPerLv: 6 },
   turbo: { dur: 20, speed: 1.65 },
   double: { dur: 20 },
   jp: { base: 500, basePerLv: 150, growPerDrop: 0.25 },
-  itemRate: 0.006, itemRatePerLv: 0.003,
+  itemRate: 0.004, itemRatePerLv: 0.002,
   goldRatePerLv: 0.02,
   combo: { window: 1.4, steps: [[10, 3], [20, 8], [30, 15], [50, 30], [75, 60], [100, 120]] },
   regen: { capBase: 30, capPerLv: 15, secBase: 24, secPerLv: 3 },
@@ -33,14 +33,14 @@ export const SYM = { SEVEN: 0, BAR: 1, BELL: 2, CHERRY: 3, STAR: 4, JP: 5, GOLD:
 export const SYM_COUNT = 8;
 // Outcomes: weight per 1000 spins (base), and payout description
 export const SLOT_TABLE = [
-  { sym: SYM.SEVEN, w: 6, kind: 'fever', shower: 30 },
-  { sym: SYM.JP, w: 11, kind: 'ball' },
-  { sym: SYM.BAR, w: 18, kind: 'shower', shower: 20 },
-  { sym: SYM.BELL, w: 40, kind: 'shower', shower: 10 },
-  { sym: SYM.CHERRY, w: 75, kind: 'shower', shower: 5 },
-  { sym: SYM.STAR, w: 28, kind: 'item' },
-  { sym: SYM.GOLD, w: 24, kind: 'gold', n: 3 },
-  { sym: SYM.GEM, w: 9, kind: 'rainbow', n: 1 },
+  { sym: SYM.SEVEN, w: 5, kind: 'fever', shower: 20 },
+  { sym: SYM.JP, w: 6, kind: 'ball' },
+  { sym: SYM.BAR, w: 15, kind: 'shower', shower: 15 },
+  { sym: SYM.BELL, w: 35, kind: 'shower', shower: 8 },
+  { sym: SYM.CHERRY, w: 70, kind: 'shower', shower: 4 },
+  { sym: SYM.STAR, w: 25, kind: 'item' },
+  { sym: SYM.GOLD, w: 20, kind: 'gold', n: 2 },
+  { sym: SYM.GEM, w: 8, kind: 'rainbow', n: 1 },
 ];
 
 // JP roulette pockets

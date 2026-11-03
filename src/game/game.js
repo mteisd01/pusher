@@ -89,7 +89,7 @@ export class Game {
       this.save.coins -= B.dropCost;
       const off = n > 1 ? (i - (n - 1) / 2) * 0.75 : 0;
       const x = Math.max(-(L.halfW - 0.6), Math.min(L.halfW - 0.6, this.launcherX + off + rand(-0.08, 0.08)));
-      const gold = this.fx.fever > 0 || Math.random() < B.goldRatePerLv * this.upg('gold');
+      const gold = (this.fx.fever > 0 && Math.random() < B.fever.goldChance) || Math.random() < B.goldRatePerLv * this.upg('gold');
       this.physics.cmd('spawn', gold ? KIND.GOLD : KIND.SILVER, x, L.dropY - 0.1, L.dropZ + rand(-0.15, 0.15), tiltQ(0.25), { x: rand(-0.2, 0.2), y: -2.5, z: rand(-0.1, 0.25) }, 0, 1);
       k++;
     }
@@ -198,6 +198,10 @@ export class Game {
       case KIND.SILVER: case KIND.GOLD: case KIND.RAINBOW: case KIND.BIG: {
         const v = B.value[e.kind] * mult;
         this.credit(v, 'win');
+        if (s.f_slot && Math.abs(e.x) < 1.6 && Math.random() < 0.12 && this.save.stock < this.stockMax()) {
+          this.save.stock++; this.audio.gate();
+          this.ui.popup(t('chance'), e.x, 1.2, L.frontZ, '#7CFFB2', 1.4);
+        }
         this.prog.addXp(e.kind === KIND.SILVER ? 0 : Math.ceil(v / 5));
         this._combo(v);
         this._pop(v, e.x, e.kind);
@@ -314,7 +318,7 @@ export class Game {
       case 'fever':
         this.prog.add('sevens');
         if (s.f_fever) this.startFever(); else this.backboard.message('777', '#ff2d55', 2, 140);
-        this.shower(o.shower + (s.f_fever ? 0 : 30));
+        this.shower(o.shower + (s.f_fever ? 0 : 40));
         this.audio.winBig();
         break;
       case 'ball': this.spawnItem(KIND.BALL); this.backboard.message('JP BALL!', '#ffd34d', 2, 100); this.audio.winBig(); break;
@@ -448,6 +452,8 @@ export class Game {
     if (s.f_slot) this.slot.update(dt);
     if (this.jpQueue > 0 && !this.jpRunning && !this.roulette.active) this._runJackpot();
     this.prog.add('playTime', dt);
+    this._missionTimer = (this._missionTimer || 0) + dt;
+    if (this._missionTimer > 30) { this._missionTimer = 0; this.prog.ensureMissions(); }
     this.prog.checkAchievements();
     this.payoutFlash = Math.max(0, this.payoutFlash - dt * 3);
   }

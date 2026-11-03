@@ -28,7 +28,7 @@ async function boot() {
   setLoad(t('loading'), 0.1);
   // resolve quality preset
   const q = s.quality === 'auto' ? detectQuality() : s.quality;
-  if (!save._qualityApplied || s.quality === 'auto') Object.assign(s, QUALITY_PRESETS[q] ? { ...QUALITY_PRESETS[q], quality: s.quality } : {});
+  if (QUALITY_PRESETS[q] && (s.quality === 'auto' || !save._qualityApplied)) Object.assign(s, QUALITY_PRESETS[q]);
   save._qualityApplied = true;
   configureLayout(s.tableSize);
 
@@ -93,12 +93,14 @@ async function boot() {
     return null;
   }
 
+  const PRESET_KEYS = new Set(Object.keys(QUALITY_PRESETS.high));
   function applySetting(key) {
     const st = s;
+    if (PRESET_KEYS.has(key) && st.quality !== 'custom') st.quality = 'custom';
     switch (key) {
       case 'quality':
-        if (st.quality !== 'auto') Object.assign(st, QUALITY_PRESETS[st.quality]);
-        else Object.assign(st, QUALITY_PRESETS[detectQuality()]);
+        if (st.quality === 'custom') break;
+        Object.assign(st, QUALITY_PRESETS[st.quality === 'auto' ? detectQuality() : st.quality]);
         coins.build(st.coinDetail);
         coins.setShadows(!!st.shadows, st.coinDetail === 'high' || st.coinDetail === 'ultra');
         stage.applyQuality(st); effects.amount = st.particles;
@@ -247,7 +249,12 @@ async function boot() {
     // render latest physics state, then request next step (buffer is transferred)
     const buf = physics.buf;
     let pz, gy;
-    if (buf) { coins.update(buf); pz = buf[1]; gy = buf[2]; }
+    if (buf) {
+      coins.update(buf); pz = buf[1]; gy = buf[2];
+      sparkleAcc += dt;
+      if (sparkleAcc > 0.12) { sparkleAcc = 0; emitSparkles(buf); }
+    }
+    perfCheck(dt);
     physics.tick(dt);
     stage.update(dt, {
       pusherZ: pz, guardY: gy, launcherX: game.launcherX, showBeam: s.showBeam,
@@ -265,6 +272,32 @@ async function boot() {
     if (now - lastBoard > 60000) persistBoard();
   }
   requestAnimationFrame(loop);
+
+  // twinkles on rare objects so they stand out in the pile
+  let sparkleAcc = 0;
+  const SPARK = { 2: '#ffffff', 3: '#ffd34d', 4: '#ff6b6b', 5: '#ffffff', 6: '#ffd34d', 7: '#7fe7ff' };
+  function emitSparkles(b) {
+    if (s.reduceMotion) return;
+    const n = b[0] | 0;
+    for (let i = 0, o = 8; i < n; i++, o += 10) {
+      const k = b[o + 1] | 0;
+      if (k < 2 || Math.random() > 0.35) continue;
+      const col = k === 5 ? ['#ff1744', '#2979ff', '#00e676', '#ffc400', '#d500f9', '#ffffff'][Math.floor(b[o + 2] / 4) % 6] : SPARK[k];
+      effects.burst(b[o + 3] + (Math.random() - 0.5) * 0.6, b[o + 4] + 0.3, b[o + 5] + (Math.random() - 0.5) * 0.6, col, 1, 0.6, k === 5 && (b[o + 2] % 4) >= 2 ? 0.9 : 0.55, 0.6);
+    }
+  }
+  // suggest a lighter configuration when physics cannot keep up
+  let perfT = 0, perfSlow = 0, perfWarned = false;
+  function perfCheck(dt) {
+    if (perfWarned) return;
+    perfT += dt;
+    if (perfT < 8) return;
+    if ((game.physMs || 0) > 1000 / s.physHz * 1.6) perfSlow += dt; else perfSlow = Math.max(0, perfSlow - dt);
+    if (perfSlow > 6) {
+      perfWarned = true;
+      ui.toast('⚙', t('perfHint'));
+    }
+  }
 
   // expose for debugging / automated tests
   window.__game = game;

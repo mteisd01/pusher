@@ -304,7 +304,7 @@ export class UI {
       html += `<div class="gemrow ${g.save.gemSets[ty] ? 'complete' : ''}"><span class="gname">${types[ty]}</span>`;
       for (let r = 0; r < 4; r++) {
         const c = gems[ty * 4 + r];
-        html += `<div class="gem ${c ? 'have' : ''} r${r}" title="${types[ty]} ${rar[r]}"><svg viewBox="0 0 40 40"><path d="M8 15 L14 7 H26 L32 15 L20 34 Z" fill="${c ? GEM_COLORS[ty] : '#333'}" stroke="${c ? '#fff' : '#555'}" stroke-width="1.5"/><path d="M8 15 H32 M14 7 L17 15 L20 34 M26 7 L23 15 L20 34" stroke="${c ? 'rgba(255,255,255,.6)' : '#444'}" fill="none"/></svg><small>${rar[r]}${c ? ` ×${c}` : ''}</small></div>`;
+        html += `<div class="gem ${c ? 'have' : ''} r${r}" title="${types[ty]} ${rar[r]}"><svg viewBox="0 0 40 40"><path d="M8 15 L14 7 H26 L32 15 L20 34 Z" fill="${c ? GEM_COLORS[ty] : '#333'}" stroke="${c ? '#fff' : '#555'}" stroke-width="1.5"/><path d="M8 15 H32 M14 7 L17 15 L20 34 M26 7 L23 15 L20 34" stroke="${c ? 'rgba(255,255,255,.6)' : '#444'}" fill="none"/></svg>${this.s.cbSymbols ? `<b class="gsym">${'RSETAD'[ty]}${r + 1}</b>` : ''}<small>${rar[r]}${c ? ` ×${c}` : ''}</small></div>`;
       }
       html += '</div>';
     }
@@ -334,7 +334,7 @@ export class UI {
   }
 
   settingsSchema() {
-    const q = ['auto', 'low', 'medium', 'high', 'ultra'];
+    const q = ['auto', 'low', 'medium', 'high', 'ultra', 'custom'];
     return [
       ['g_graphics', [
         ['quality', 'select', q.map(v => [v, t('q_' + v)])],
