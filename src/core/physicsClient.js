@@ -71,6 +71,10 @@ export class PhysicsClient {
   }
 
   snapshot() {
-    return new Promise(res => { this.wantSnap = res; });
+    return new Promise(res => {
+      this.wantSnap = res;
+      // the game may be paused (no ticks): request a zero-length step to get the snapshot
+      if (!this.busy) this.tick(0);
+    });
   }
 }

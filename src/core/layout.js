@@ -24,7 +24,7 @@ export const L = {
 
 export const TABLE_SIZES = { wide: 11, normal: 9, compact: 7 };
 // narrower tables get shorter side gutters so that the base payout stays comparable
-const GUTTER = { wide: -0.5, normal: 0.7, compact: 1.8 };
+const GUTTER = { wide: -0.5, normal: 0.3, compact: 0.9 };
 export function configureLayout(size) {
   if (!TABLE_SIZES[size]) size = 'wide';
   L.halfW = TABLE_SIZES[size];

@@ -146,6 +146,8 @@ textarea { width: 100%; font: 12px monospace; color: var(--txt); background: #0b
 
 /* 2D mini-game overlay */
 .overlay2d { position: absolute; inset: 0; z-index: 14; background: radial-gradient(circle, rgba(30,15,40,.82), rgba(0,0,0,.94)); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .4em; }
+.overlay2d.compact { inset: auto; top: 24%; left: max(8px, env(safe-area-inset-left)); background: rgba(0,0,0,.55); border-radius: 16px; padding: .3em .5em .5em; pointer-events: none !important; box-shadow: 0 6px 24px rgba(0,0,0,.5); }
+.overlay2d.compact .ov-title { font-size: clamp(12px, 1.8vw, 18px); }
 .ov-title { font: 900 clamp(18px, 3.6vw, 36px) "Arial Black", Arial; color: var(--gold); text-shadow: 0 0 18px #ff9e1b; }
 .ov-sub { font-weight: 700; opacity: .8; }
 

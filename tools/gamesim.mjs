@@ -32,7 +32,7 @@ const noop = () => {};
 const proxy = new Proxy({}, { get: (t, k) => k === 'then' ? undefined : (t[k] || noop) });
 const save = newSave();
 save.coins = 100000;
-save.stats.maxWallet = 1e9; // don't count wallet achievements in the measurement
+for (const k of ['maxWallet_0', 'maxWallet_1', 'maxWallet_2']) save.achievements[k] = 1; // don't count wallet achievements
 save.settings.f_login = false; save.settings.f_hints = false; save.settings.f_regen = false;
 const tally = {};
 const roulette = { active: false, run: async idx => { const { ROULETTE } = await import('../src/game/balance.js'); return ROULETTE[idx]; } };
@@ -74,6 +74,7 @@ for (let f = 0; f < frames; f++) {
   ev.length = 0; ev.impacts = 0;
   phys.step(dt, ev);
   game.onPhysicsFrame({ ev, n: phys.objs.length, ms: 0 });
+  if (f % 30 === 0) await new Promise(r => setImmediate(r)); // let async game code (mini games) progress
   if (f % (60 * 60) === 0) marks.push(`${Math.round(f / 3600)}m:${save.coins - start}`);
 }
 const st = save.stats;

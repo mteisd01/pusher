@@ -53,7 +53,7 @@ export class Game {
   get diff() { return B.difficulty[this.settings.difficulty] || B.difficulty.normal; }
   upg(id) { return this.prog.upg(id); }
   stockMax() { return B.stockBase + this.upg('stock'); }
-  gateHalf() { return (B.gate.half + B.gate.halfPerLv * this.upg('gate')) * this.diff.gate * (this.fx.fever > 0 ? 1.6 : 1) * this.features.gateMult(); }
+  gateHalf() { return (B.gate.half + B.gate.halfPerLv * this.upg('gate')) * Math.pow(L.halfW / 11, 1.2) * this.diff.gate * (this.fx.fever > 0 ? 1.6 : 1) * this.features.gateMult(); }
   get overlayBusy() { return this.features.busy || this.roulette.active || this.jpRunning; }
   slotLuck() { return (1 + 0.06 * this.upg('luck') + this.prog.gemLuck()) * this.diff.slot * (this.fx.fever > 0 ? 1.4 : 1); }
   itemRate() { return (B.itemRate + B.itemRatePerLv * this.upg('item')) * this.diff.item; }
@@ -218,7 +218,6 @@ export class Game {
         this.credit(v, 'win');
         if (zone && Math.random() < 0.18) {
           if (s.f_slot && this.save.stock < this.stockMax()) { this.save.stock++; this.ui.popup('+1 STOCK', e.x, 1.2, L.frontZ, '#7CFFB2', 1.3); }
-          else if (s.f_sugoroku) { this.features.addDice(1); this.ui.popup('+1 DICE', e.x, 1.2, L.frontZ, '#ffd34d', 1.3); }
           this.audio.gate();
         }
         this.prog.addXp(e.kind === KIND.SILVER ? 0 : Math.ceil(v / 5));
@@ -249,7 +248,7 @@ export class Game {
       case KIND.CHEST: {
         this.prog.add('items'); this.prog.add('chests');
         const r = Math.random();
-        if (r < 0.5) { const n = Math.round(rand(30, 120)); this.credit(n, 'item'); this.toast('🧰', `${t('chest')} +${n}`); }
+        if (r < 0.5) { const n = Math.round(rand(15, 60)); this.credit(n, 'item'); this.toast('🧰', `${t('chest')} +${n}`); }
         else if (r < 0.75 && s.f_gems) { this.spawnItem(KIND.GEM); this.toast('🧰', `${t('chest')} → 💎`); }
         else { this.spawnRandomItem(); this.toast('🧰', `${t('chest')} → 🎁`); }
         this.effects.burst(...fxPos, '#ffd34d', 30, 5, 0.8, 1);

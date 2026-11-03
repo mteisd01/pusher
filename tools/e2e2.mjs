@@ -25,18 +25,19 @@ await ev(() => __game.ui.togglePause(false));
 // dice / road
 await ev(() => { __game.features.addDice(1); });
 await p.waitForTimeout(1200); await shot('road');
-await p.waitForFunction(() => !__game.features.busy, null, { timeout: 60000 });
+await p.waitForFunction(() => !__game.features.rolling, null, { timeout: 150000 });
 console.log('road pos', await ev(() => __game.save.roadPos));
 // croon
 await ev(() => { __game.jpQueue++; });
 await p.waitForTimeout(2500); await shot('croon');
-await p.waitForFunction(() => !__game.features.busy && __game.jpQueue === 0, null, { timeout: 120000 });
+await p.waitForTimeout(500);
+await p.waitForFunction(() => !__game.features.busy && !__game.features.queue.length && __game.jpQueue === 0, null, { timeout: 200000 });
 console.log('croon best', await ev(() => __game.save.stats.croonBest));
 // plinko
 await ev(() => __game.features.enqueue(() => __game.features.plinko()));
 await p.waitForTimeout(1500); await shot('plinko');
 await p.mouse.click(640, 200);
-await p.waitForFunction(() => !__game.features.busy, null, { timeout: 60000 });
+await p.waitForFunction(() => !__game.features.busy && !__game.features.queue.length, null, { timeout: 200000 });
 // events + items
 await ev(() => { __game.features.startEvent('giant'); __game.activateToken(9); __game.activateToken(8); __game.features.pocketT = 0; });
 await p.waitForTimeout(4000); await shot('event');

@@ -16,7 +16,7 @@ await page.goto(url);
 await page.waitForFunction(() => window.__game, null, { timeout: 60000 });
 await page.waitForTimeout(2000);
 const ev = (f, a) => page.evaluate(f, a);
-await ev(() => { const b = document.querySelector('#dYes'); if (b) b.click(); });
+await page.waitForSelector('#dYes', { timeout: 8000 }).catch(() => {}); await ev(() => { const b = document.querySelector('#dYes'); if (b) b.click(); });
 const c0 = await ev(() => __game.save.coins);
 // hold drop for 3s
 await page.mouse.move(640, 300);

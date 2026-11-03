@@ -1,7 +1,7 @@
 // v2 game elements: Lucky Road (sugoroku), random field events, center pocket, bonus zone,
 // 3-stage croon jackpot, plinko and the overlay queue that runs mini games one at a time.
 import { L, KIND, TOKEN } from '../core/layout.js';
-import { ROAD, ROAD_LAP_BONUS, ROAD_GATE_PER_DIE, CROON, PLINKO, EVENTS, EVENT_INTERVAL, POCKET_CYCLE, BONUS_ZONE, B } from './balance.js';
+import { ROAD, ROAD_LAP_BONUS, ROAD_GATE_PER_DIE, roadMult, CROON, PLINKO, EVENTS, EVENT_INTERVAL, POCKET_CYCLE, BONUS_ZONE, B } from './balance.js';
 import { t } from '../i18n.js';
 
 const rand = (a, b) => a + Math.random() * (b - a);
@@ -11,6 +11,7 @@ export class Features {
     this.g = game;
     this.queue = [];
     this.busy = false;
+    this.rolling = false;
     this.event = null;              // { id, t, dur, ... }
     this.nextEvent = rand(...EVENT_INTERVAL) * 0.5;
     this.pocketT = POCKET_CYCLE.closed * 0.6;
@@ -33,9 +34,13 @@ export class Features {
 
   update(dt) {
     const s = this.s, g = this.g;
-    if (!this.busy && this.queue.length && !g.roulette.active) this._runNext();
-    // lucky road: roll stocked dice
-    if (s.f_sugoroku && !this.busy && (this.save.dice || 0) > 0 && !this.queue.length) { this.save.dice--; this.enqueue(() => this.rollDice()); }
+    if (!this.busy && !this.rolling && this.queue.length && !g.roulette.active) this._runNext();
+    // lucky road: roll stocked dice in a small, non-blocking panel
+    if (s.f_sugoroku && !this.busy && !this.rolling && (this.save.dice || 0) > 0 && !this.queue.length && !g.roulette.active) {
+      this.save.dice--;
+      this.rolling = true;
+      this.rollDice().catch(e => console.error(e)).finally(() => { this.rolling = false; });
+    }
     // random events
     if (s.f_events) {
       if (this.event) {
@@ -72,7 +77,7 @@ export class Features {
     const r = Math.random();
     let msg;
     if (r < 0.35 && this.s.f_slot && this.save.stock < g.stockMax()) { this.save.stock++; msg = '+1 STOCK'; }
-    else if (r < 0.55 && this.s.f_sugoroku) { this.addDice(1); msg = '+1 DICE'; }
+    else if (r < 0.45 && this.s.f_sugoroku) { this.addDice(1); msg = '+1 DICE'; }
     else if (r < 0.62 && this.s.f_items) { g.spawnRandomItem(); msg = 'ITEM!'; }
     else { const n = 3; g.shower(n); msg = `+${n}`; }
     g.ui.popup(msg, e.x, 1.2, 2.6, '#7CFFB2', 1.4);
@@ -88,7 +93,7 @@ export class Features {
     if (this.save.roadGate >= ROAD_GATE_PER_DIE) { this.save.roadGate = 0; this.addDice(1); this.g.ui.popup('+1 DICE', this.g.gateX, 4, L.dropZ, '#ffd34d', 1.2); }
   }
   squareLabel(sq) {
-    const lap = this.save.roadLap || 0, m = 1 + lap * 0.25;
+    const m = roadMult(this.save.roadLap || 0);
     const ja = this.s.lang !== 'en';
     switch (sq.t) {
       case 'start': return 'START';
@@ -124,12 +129,12 @@ export class Features {
     this.save.roadLap = lap + 1;
     g.prog.add('roadLaps');
     g.shower(Math.min(60, bonus)); if (bonus > 60) g.credit(bonus - 60, 'road');
-    g.spawnItem(KIND.BALL);
+    if (this.s.f_items) g.spawnRandomItem();
     g.ui.banner(`LUCKY ROAD CLEAR! +${bonus}`, 'rainbow', 2.5);
     g.audio.fanfare(); g.effects.confetti(150); g.stage.addShake(0.4);
   }
   async _land(sq) {
-    const g = this.g, m = 1 + (this.save.roadLap || 0) * 0.25;
+    const g = this.g, m = roadMult(this.save.roadLap || 0);
     switch (sq.t) {
       case 'coin': { const n = Math.round(sq.n * m); g.credit(n, 'road'); g.ui.banner(`+${n}`, '#ffd34d'); g.audio.win('gold'); break; }
       case 'shower': g.shower(Math.round(sq.n * m)); g.ui.banner(t('shower'), '#7CFFB2'); g.audio.win('bell'); break;
@@ -145,7 +150,7 @@ export class Features {
       case 'giant': this.spawnGiant(); break;
       case 'boss': {
         // the last square: big reward + JP ball
-        const n = Math.round(120 * m); g.shower(Math.min(60, n)); if (n > 60) g.credit(n - 60, 'road');
+        const n = Math.round(30 * m); g.shower(Math.min(60, n)); if (n > 60) g.credit(n - 60, 'road');
         g.spawnItem(KIND.BALL); g.ui.banner(`GOAL BONUS +${n}`, 'rainbow'); g.audio.winBig();
         break;
       }
@@ -173,7 +178,7 @@ export class Features {
     g.ui.banner(t('ev_' + id), '#ff8a65', 2.6);
     switch (id) {
       case 'meteor':
-        g.shower(35); g.shower(3, KIND.BIG); g.shower(5, KIND.GOLD);
+        g.shower(20); g.shower(1, KIND.BIG); g.shower(3, KIND.GOLD);
         break;
       case 'giant': setTimeout(() => this.spawnGiant(), 1500); break;
       case 'hyper': g.physics.cmd('stroke', g.upg('stroke') * 0.3 + 1.6); break;
@@ -200,7 +205,7 @@ export class Features {
     this.event = null;
     g.audio.setMood('normal');
   }
-  goldRush() { return this.event && this.event.id === 'goldRush'; }
+  goldRush() { return this.event && this.event.id === 'goldRush' && Math.random() < 0.5; }
   gateMult() { return this.event && this.event.id === 'luckyGate' ? 2.6 : 1; }
   speedMult() { return this.event && this.event.id === 'hyper' ? 1.45 : 1; }
 

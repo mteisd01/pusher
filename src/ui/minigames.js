@@ -18,11 +18,12 @@ export class MiniGames {
     this.el.addEventListener('pointermove', e => this._onMove && this._onMove(e));
   }
 
-  _open(title, w, h) {
-    this.active = true; this.speed = 1;
+  _open(title, w, h, compact = false) {
+    this.active = !compact; this.speed = 1;
     this.el.classList.remove('hidden');
+    this.el.classList.toggle('compact', compact);
     this.title.textContent = title; this.sub.textContent = '';
-    const k = Math.min(window.innerWidth * 0.92 / w, window.innerHeight * 0.78 / h);
+    const k = compact ? Math.min(window.innerWidth * 0.27 / w, window.innerHeight * 0.34 / h) : Math.min(window.innerWidth * 0.92 / w, window.innerHeight * 0.78 / h);
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     this.cw = w * k; this.ch = h * k;
     const c = this.canvas;
@@ -30,12 +31,12 @@ export class MiniGames {
     this.g = c.getContext('2d'); this.g.setTransform(dpr * k, 0, 0, dpr * k, 0, 0);
     this.W = w; this.H = h; this.k = k;
   }
-  _close() { this.el.classList.add('hidden'); this.active = false; this._onDown = this._onMove = null; }
+  _close() { this.el.classList.add('hidden'); this.el.classList.remove('compact'); this.active = false; this._onDown = this._onMove = null; }
   _loop(fn) {
     return new Promise(resolve => {
       let last = performance.now();
       const frame = now => {
-        const dt = Math.min(0.1, (now - last) / 1000) * this.speed; last = now;
+        const dt = this.isPaused && this.isPaused() ? 0 : Math.min(0.1, (now - last) / 1000) * this.speed; last = now;
         const r = fn(dt);
         if (r !== undefined) resolve(r); else requestAnimationFrame(frame);
       };
@@ -220,8 +221,8 @@ export class MiniGames {
   // ---------- dice + lucky road board ----------
   async roadMove(board, from, steps, lap, labelFn) {
     const W = 120, H = 70;
-    this._open(`LUCKY ROAD  LAP ${lap + 1}`, W, H);
-    this._skippable();
+    this._open(`LUCKY ROAD  LAP ${lap + 1}`, W, H, true);
+    this.speed = 1.4;
     const g = this.g, n = board.length;
     // square positions around a rounded rectangle
     // squares evenly spaced along the perimeter of a rectangle (8 + 4 + 8 + 4)

@@ -359,7 +359,7 @@ export class UI {
 
   tab_road(body) {
     const g = this.game, f = g.features, pos = g.save.roadPos || 0;
-    body.innerHTML = `<h3>${t('road')} <small>${t('lap')} ${(g.save.roadLap || 0) + 1} · ${t('dice')} ${g.save.dice || 0} · GATE ${g.save.roadGate || 0}/10</small></h3><p class="note">${t('roadInfo')}</p>
+    body.innerHTML = `<h3>${t('road')} <small>${t('lap')} ${(g.save.roadLap || 0) + 1} · ${t('dice')} ${g.save.dice || 0} · GATE ${g.save.roadGate || 0}/30</small></h3><p class="note">${t('roadInfo')}</p>
       <div class="roadgrid">${f.board().map((s, i) => `<div class="sq ${i === pos ? 'cur' : ''}" style="--c:${s.color}"><small>${i}</small>${esc(f.squareLabel(s))}</div>`).join('')}</div>`;
   }
 

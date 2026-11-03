@@ -8,22 +8,22 @@ export const B = {
   autoRateBase: 1.6,          // drops / s
   autoRatePerLv: 0.45,
   value: { [KIND.SILVER]: 1, [KIND.GOLD]: 5, [KIND.RAINBOW]: 25, [KIND.BIG]: 30, [KIND.GIANT]: 50 },
-  gate: { half: 0.78, halfPerLv: 0.09, period: 4.6, range: 9.0 },
+  gate: { half: 0.7, halfPerLv: 0.08, period: 4.6, range: 9.0 },
   stockBase: 4,
   slotTime: 2.4,
-  fever: { dur: 20, durPerLv: 4, goldChance: 0.35 },
+  fever: { dur: 15, durPerLv: 3, goldChance: 0.25 },
   walls: { dur: 25, durPerLv: 6 },
   turbo: { dur: 20, speed: 1.65 },
   double: { dur: 20 },
   jp: { base: 500, basePerLv: 150, growPerDrop: 0.25 },
-  itemRate: 0.004, itemRatePerLv: 0.002,
+  itemRate: 0.003, itemRatePerLv: 0.0015,
   goldRatePerLv: 0.02,
-  combo: { steps: [[22, 3], [30, 8], [40, 15], [55, 30], [75, 60]] },
+  combo: { steps: [[30, 3], [40, 8], [55, 15], [75, 30]] },
   regen: { capBase: 20, capPerLv: 10, secBase: 40, secPerLv: 4 },
   difficulty: {
-    easy: { slot: 1.35, gate: 1.25, item: 1.4, label: 'easy' },
-    normal: { slot: 1, gate: 1, item: 1, label: 'normal' },
-    hard: { slot: 0.72, gate: 0.8, item: 0.7, label: 'hard' },
+    easy: { slot: 1.2, gate: 1.25, item: 1.4, label: 'easy' },
+    normal: { slot: 0.8, gate: 1, item: 1, label: 'normal' },
+    hard: { slot: 0.65, gate: 0.8, item: 0.7, label: 'hard' },
   },
   maxShowerPhysical: 120,
 };
@@ -33,11 +33,11 @@ export const SYM = { SEVEN: 0, BAR: 1, BELL: 2, CHERRY: 3, STAR: 4, JP: 5, GOLD:
 export const SYM_COUNT = 8;
 // Outcomes: weight per 1000 spins (base), and payout description
 export const SLOT_TABLE = [
-  { sym: SYM.SEVEN, w: 5, kind: 'fever', shower: 15 },
+  { sym: SYM.SEVEN, w: 4, kind: 'fever', shower: 12 },
   { sym: SYM.JP, w: 8, kind: 'ball' },
-  { sym: SYM.BAR, w: 15, kind: 'shower', shower: 10 },
-  { sym: SYM.BELL, w: 35, kind: 'shower', shower: 4, dice: 1 },
-  { sym: SYM.CHERRY, w: 70, kind: 'shower', shower: 3 },
+  { sym: SYM.BAR, w: 15, kind: 'shower', shower: 8 },
+  { sym: SYM.BELL, w: 30, kind: 'shower', shower: 3, dice: 1 },
+  { sym: SYM.CHERRY, w: 60, kind: 'shower', shower: 2 },
   { sym: SYM.STAR, w: 25, kind: 'item' },
   { sym: SYM.GOLD, w: 20, kind: 'gold', n: 2 },
   { sym: SYM.GEM, w: 8, kind: 'rainbow', n: 1 },
@@ -69,7 +69,7 @@ export const ITEM_TABLE = [
   { kind: KIND.TOKEN, extra: TOKEN.SHOWER, w: 14 },
   { kind: KIND.TOKEN, extra: TOKEN.TURBO, w: 10 },
   { kind: KIND.TOKEN, extra: TOKEN.DOUBLE, w: 9 },
-  { kind: KIND.TOKEN, extra: TOKEN.FEVER, w: 3 },
+  { kind: KIND.TOKEN, extra: TOKEN.FEVER, w: 2 },
   { kind: KIND.TOKEN, extra: TOKEN.STOCK, w: 9 },
   { kind: KIND.GEM, w: 22 },
   { kind: KIND.CHEST, w: 10 },
@@ -82,8 +82,8 @@ export const ITEM_TABLE = [
 ];
 
 export const GEM_RARITY_W = [62, 27, 9, 2];
-export const GEM_REWARD_NEW = [20, 60, 200, 1000];
-export const GEM_REWARD_DUP = [5, 15, 50, 250];
+export const GEM_REWARD_NEW = [10, 25, 80, 300];
+export const GEM_REWARD_DUP = [2, 5, 15, 60];
 
 export const UPGRADES = [
   { id: 'stroke', max: 5, cost: 400, grow: 1.9 },
@@ -102,7 +102,7 @@ export const UPGRADES = [
 export const upgradeCost = (u, lv) => Math.round(u.cost * Math.pow(u.grow, lv) / 10) * 10;
 
 export const xpForLevel = lv => Math.round(40 * Math.pow(lv, 1.45));
-export const levelReward = lv => 10 + lv * 2;
+export const levelReward = lv => 5 + lv;
 export const TITLES = [[1, 'novice'], [5, 'rookie'], [10, 'regular'], [20, 'veteran'], [30, 'expert'], [45, 'master'], [60, 'grandmaster'], [80, 'legend'], [100, 'king']];
 
 export const LOGIN_REWARDS = [30, 50, 60, 90, 120, 180, 300];
@@ -111,17 +111,18 @@ export const LOGIN_REWARDS = [30, 50, 60, 90, 120, 180, 300];
 // Lucky Road (sugoroku) — 24 squares around the board. n scales with lap.
 export const ROAD = [
   { t: 'start', color: '#455a64' },
-  { t: 'coin', n: 10, color: '#c79100' }, { t: 'item', color: '#1565c0' }, { t: 'coin', n: 15, color: '#c79100' },
-  { t: 'back', n: 2, color: '#b71c1c' }, { t: 'shower', n: 15, color: '#2e7d32' }, { t: 'plinko', color: '#6a1b9a' },
-  { t: 'coin', n: 20, color: '#c79100' }, { t: 'stock', color: '#00838f' }, { t: 'again', color: '#ef6c00' },
+  { t: 'coin', n: 3, color: '#c79100' }, { t: 'item', color: '#1565c0' }, { t: 'coin', n: 4, color: '#c79100' },
+  { t: 'back', n: 2, color: '#b71c1c' }, { t: 'shower', n: 5, color: '#2e7d32' }, { t: 'plinko', color: '#6a1b9a' },
+  { t: 'coin', n: 5, color: '#c79100' }, { t: 'stock', color: '#00838f' }, { t: 'again', color: '#ef6c00' },
   { t: 'gem', color: '#ad1457' }, { t: 'back', n: 3, color: '#b71c1c' }, { t: 'ball', color: '#37474f' },
-  { t: 'coin', n: 25, color: '#c79100' }, { t: 'event', color: '#4527a0' }, { t: 'shower', n: 20, color: '#2e7d32' },
+  { t: 'coin', n: 6, color: '#c79100' }, { t: 'event', color: '#4527a0' }, { t: 'shower', n: 8, color: '#2e7d32' },
   { t: 'item', color: '#1565c0' }, { t: 'back', n: 4, color: '#b71c1c' }, { t: 'fever', color: '#d81b60' },
-  { t: 'coin', n: 30, color: '#c79100' }, { t: 'plinko', color: '#6a1b9a' }, { t: 'again', color: '#ef6c00' },
+  { t: 'coin', n: 8, color: '#c79100' }, { t: 'back', n: 2, color: '#b71c1c' }, { t: 'again', color: '#ef6c00' },
   { t: 'giant', color: '#8d6e00' }, { t: 'boss', color: '#000000' },
 ];
-export const ROAD_LAP_BONUS = lap => 200 + lap * 80;
-export const ROAD_GATE_PER_DIE = 10;        // gate passes per die
+export const ROAD_LAP_BONUS = lap => 60 + Math.min(lap, 10) * 20;
+export const ROAD_GATE_PER_DIE = 30;        // gate passes per die
+export const roadMult = lap => 1 + Math.min(lap, 10) * 0.1;
 
 // 3-stage croon. JP probability ≈ 1/2 × 1/3 × 1/4 = 1/24 per ball (before luck)
 export const CROON = [
@@ -140,13 +141,13 @@ export const PLINKO = [
 
 // Random field events
 export const EVENTS = [
-  { id: 'goldRush', w: 3, dur: 20 },
+  { id: 'goldRush', w: 3, dur: 15 },
   { id: 'meteor', w: 3, dur: 6 },
   { id: 'giant', w: 2, dur: 4 },
   { id: 'hyper', w: 3, dur: 15 },
   { id: 'luckyGate', w: 3, dur: 20 },
   { id: 'challenge', w: 3, dur: 30 },
 ];
-export const EVENT_INTERVAL = [150, 300];   // seconds
+export const EVENT_INTERVAL = [200, 400];   // seconds
 export const POCKET_CYCLE = { closed: 35, open: 6 };
 export const BONUS_ZONE = { half: 1.0, period: 7, mult: 2, stockChance: 0.12 };

@@ -78,6 +78,7 @@ async function boot() {
   const mini = new MiniGames(uiRoot, audio, () => s);
   game = new Game({ stage, coins, backboard, effects, audio, physics, ui, save, roulette, mini });
   ui.bind(game);
+  mini.isPaused = () => game.paused;
   physics.onFrame = msg => game.onPhysicsFrame(msg);
   let muted = false;
   const SOUND_SVG = document.getElementById('bMute').innerHTML;

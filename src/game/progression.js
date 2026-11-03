@@ -3,7 +3,7 @@ import { UPGRADES, xpForLevel, levelReward, TITLES, LOGIN_REWARDS, GEM_RARITY_W,
 
 // Achievements: [id, stat, target, reward, icon]
 const A = [];
-const tiers = (stat, list, icon) => list.forEach(([target, reward], i) => A.push({ id: `${stat}_${i}`, stat, target, reward, icon, tier: i }));
+const tiers = (stat, list, icon) => list.forEach(([target, reward], i) => A.push({ id: `${stat}_${i}`, stat, target, reward: Math.max(5, Math.round(reward / 3 / 5) * 5), icon, tier: i }));
 tiers('dropped', [[1, 10], [100, 30], [1000, 100], [10000, 500], [100000, 3000]], '⬇');
 tiers('won', [[10, 10], [500, 50], [5000, 300], [50000, 1500], [500000, 8000]], '💰');
 tiers('slotSpins', [[1, 10], [50, 50], [500, 300], [5000, 2000]], '🎰');
