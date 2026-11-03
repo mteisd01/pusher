@@ -1,0 +1,52 @@
+// Table themes (unlocked by player level)
+export const THEMES = [
+  {
+    id: 'casino', unlock: 1, name: { ja: 'ロイヤルカジノ', en: 'Royal Casino' },
+    bgTop: '#2a0a10', bgBottom: '#070203', fog: '#12040a',
+    floorA: '#5b4a36', floorB: '#3a2d20', floorLine: '#ffd36a', logo: 'ROYAL',
+    cabinet: '#7d0f1d', cabinetKind: 'felt', trim: '#d9a92c', glass: '#ffe9c4',
+    led: ['#ff2d55', '#ffd23f', '#ffffff'], pusher: '#cfd3da', light: '#fff1d6', accent: '#ffcf4a',
+    bgm: { bpm: 96, root: 57, mode: 'major', lead: 'bell' },
+  },
+  {
+    id: 'neon', unlock: 5, name: { ja: 'ネオンシティ', en: 'Neon City' },
+    bgTop: '#0b0326', bgBottom: '#000000', fog: '#06021a',
+    floorA: '#141432', floorB: '#06061a', floorLine: '#00f0ff', logo: 'NEON',
+    cabinet: '#16113a', cabinetKind: 'grid', trim: '#ff2bd6', glass: '#9ff6ff',
+    led: ['#00f0ff', '#ff2bd6', '#7c4dff'], pusher: '#9aa4c4', light: '#d9e4ff', accent: '#00f0ff',
+    bgm: { bpm: 118, root: 52, mode: 'minor', lead: 'saw' },
+  },
+  {
+    id: 'ocean', unlock: 12, name: { ja: 'オーシャンブルー', en: 'Ocean Blue' },
+    bgTop: '#03314f', bgBottom: '#001018', fog: '#021b2c',
+    floorA: '#1f5c78', floorB: '#0d3247', floorLine: '#9df3ff', logo: 'OCEAN',
+    cabinet: '#0c4a6e', cabinetKind: 'wave', trim: '#7fe7ff', glass: '#c8f6ff',
+    led: ['#3ad8ff', '#ffffff', '#47ffb2'], pusher: '#d6e6ee', light: '#e6f8ff', accent: '#7fe7ff',
+    bgm: { bpm: 88, root: 55, mode: 'lydian', lead: 'marimba' },
+  },
+  {
+    id: 'sakura', unlock: 20, name: { ja: '桜花繚乱', en: 'Sakura' },
+    bgTop: '#3b1630', bgBottom: '#0d0510', fog: '#200a18',
+    floorA: '#5a2f45', floorB: '#331827', floorLine: '#ffc6dd', logo: '桜',
+    cabinet: '#2b0f1c', cabinetKind: 'sakura', trim: '#ffb3d1', glass: '#ffe0ee',
+    led: ['#ff8fc0', '#ffe3f0', '#ffd36a'], pusher: '#e8dde3', light: '#fff0f5', accent: '#ffb3d1',
+    bgm: { bpm: 84, root: 57, mode: 'pentatonic', lead: 'koto' },
+  },
+  {
+    id: 'cosmos', unlock: 30, name: { ja: 'コスモス', en: 'Cosmos' },
+    bgTop: '#06021a', bgBottom: '#000000', fog: '#03010c',
+    floorA: '#1c1640', floorB: '#05030f', floorLine: '#b39dff', logo: 'COSMOS',
+    cabinet: '#0a0820', cabinetKind: 'stars', trim: '#b39dff', glass: '#d6ccff',
+    led: ['#7c4dff', '#00e5ff', '#ffffff'], pusher: '#b9bfd6', light: '#e6e0ff', accent: '#b39dff',
+    bgm: { bpm: 100, root: 50, mode: 'dorian', lead: 'pad' },
+  },
+  {
+    id: 'palace', unlock: 45, name: { ja: '黄金宮殿', en: 'Golden Palace' },
+    bgTop: '#2a1a02', bgBottom: '#050300', fog: '#160e01',
+    floorA: '#6e5418', floorB: '#3a2a08', floorLine: '#fff1a8', logo: 'PALACE',
+    cabinet: '#3a2504', cabinetKind: 'plate', trim: '#ffd700', glass: '#fff6cc',
+    led: ['#ffd700', '#ffffff', '#ff9e1b'], pusher: '#f2d27a', light: '#fff4d8', accent: '#ffd700',
+    bgm: { bpm: 104, root: 58, mode: 'major', lead: 'brass' },
+  },
+];
+export const themeById = id => THEMES.find(t => t.id === id) || THEMES[0];
