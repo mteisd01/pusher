@@ -79,7 +79,7 @@ game.machines = { wheel: { spin: async () => {} }, cup: {}, coaster };
 // the real plinko physics (random drop position)
 const { PlinkoPhysics, PLINKO_BOARD } = await import('../src/core/plinkoPhysics.js');
 const plk = new PlinkoPhysics(RAPIER);
-game.plinko3d = { setAim() {}, run: async () => { plk.drop((Math.random() * 2 - 1) * PLINKO_BOARD.aim); let r = null; while (!r) r = plk.step(1 / 60); return r.slot; } };
+game.plinko3d = { setAim() {}, setAimWorld() {}, run: async () => { plk.drop((Math.random() * 2 - 1) * PLINKO_BOARD.aim); let r = null; while (!r) r = plk.step(1 / 60); return r.slot; } };
 physics.cmd('cup', true);
 const credit = game.credit.bind(game);
 game.credit = (n, src) => { tally[src] = (tally[src] || 0) + Math.round(n); credit(n, src); };
