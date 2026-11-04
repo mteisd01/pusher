@@ -35,7 +35,7 @@ export const SYM_COUNT = 8;
 // Outcomes: weight per 1000 spins (base), and payout description
 export const SLOT_TABLE = [
   { sym: SYM.SEVEN, w: 4, kind: 'fever', shower: 12 },
-  { sym: SYM.JP, w: 5, kind: 'ball' },
+  { sym: SYM.JP, w: 6, kind: 'ball' },
   { sym: SYM.BAR, w: 15, kind: 'shower', shower: 8 },
   { sym: SYM.BELL, w: 30, kind: 'shower', shower: 3, dice: 1 },
   { sym: SYM.CHERRY, w: 60, kind: 'shower', shower: 2 },
