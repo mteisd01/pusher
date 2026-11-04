@@ -40,7 +40,7 @@ export class PhysicsClient {
         if (m.t === 'ready') { clearTimeout(to); this.count = m.count; resolve(); }
         else if (m.t === 'frame') this._frame(m);
       });
-      send({ t: 'init', hz: opts.hz, iterations: opts.iterations, stroke: opts.stroke, snapshot: opts.snapshot, prefill: opts.prefill });
+      send({ t: 'init', layout: opts.layout, hz: opts.hz, iterations: opts.iterations, stroke: opts.stroke, snapshot: opts.snapshot, prefill: opts.prefill });
     });
   }
 

@@ -21,13 +21,24 @@ export const B = {
   goldRatePerLv: 0.02,
   combo: { steps: [[30, 3], [40, 8], [55, 15], [75, 30]] },
   regen: { capBase: 20, capPerLv: 10, secBase: 40, secPerLv: 4 },
+  // slot / gate / item: odds multipliers. gutter: extra side-gutter length (the side walls end
+  // earlier; applied on reload). xp / jp / gem: rewards (XP gain, JP pool growth, gem rarity
+  // boost). walls: guard-wall duration. regen: coin regeneration cap. rocks: falling-rock interval [s].
   difficulty: {
-    easy: { slot: 1.2, gate: 1.25, item: 1.4, label: 'easy' },
-    normal: { slot: 0.8, gate: 1, item: 1, label: 'normal' },
-    hard: { slot: 0.65, gate: 0.8, item: 0.7, label: 'hard' },
+    easy: { slot: 1.2, gate: 1.25, item: 1.4, gutter: 0, xp: 1, jp: 1, gem: 1, walls: 1.2, regen: 1.5, rocks: null, color: '#7CFFB2', badge: '' },
+    normal: { slot: 0.8, gate: 1, item: 1, gutter: 0, xp: 1, jp: 1, gem: 1, walls: 1, regen: 1, rocks: null, color: '#ffffff', badge: '' },
+    hard: { slot: 0.65, gate: 0.8, item: 0.7, gutter: 0, xp: 1.1, jp: 1.1, gem: 1.15, walls: 0.9, regen: 1, rocks: null, color: '#ff9e1b', badge: '' },
+    expert: { slot: 0.55, gate: 0.7, item: 0.6, gutter: 0.6, xp: 1.25, jp: 1.2, gem: 1.35, walls: 0.8, regen: 0.8, rocks: null, color: '#ffd34d', badge: '達' },
+    shura: { slot: 0.47, gate: 0.62, item: 0.5, gutter: 1.1, xp: 1.45, jp: 1.35, gem: 1.6, walls: 0.7, regen: 0.5, rocks: [180, 300], color: '#ff2d55', badge: '修' },
+    inferno: { slot: 0.4, gate: 0.55, item: 0.42, gutter: 1.6, xp: 1.7, jp: 1.5, gem: 2.0, walls: 0.6, regen: 0.5, rocks: [120, 220], color: '#d500f9', badge: '獄' },
   },
   maxShowerPhysical: 120,
 };
+
+export const DIFFICULTIES = ['easy', 'normal', 'hard', 'expert', 'shura', 'inferno'];
+export const diffDef = id => B.difficulty[id] || B.difficulty.normal;
+// value of a rock block pushed off the front edge
+export const ROCK_REWARD = 3;
 
 // Slot symbols
 export const SYM = { SEVEN: 0, BAR: 1, BELL: 2, CHERRY: 3, STAR: 4, JP: 5, GOLD: 6, GEM: 7 };

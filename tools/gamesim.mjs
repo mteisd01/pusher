@@ -1,10 +1,11 @@
 // Full-game headless balance simulator: real physics + real game logic, stubbed presentation.
-// usage: node tools/gamesim.mjs [minutes=10] [strategy=random|aim] [dropsPerSec=4] [size=wide]
+// usage: node tools/gamesim.mjs [minutes=10] [strategy=random|aim] [dropsPerSec=4] [size=wide] [difficulty=normal]
 import RAPIER from '@dimforge/rapier3d-compat';
 import fs from 'fs';
 import { L, configureLayout, cupXAt } from '../src/core/layout.js';
-const [mins, strat, rate, size] = [process.argv[2] || 10, process.argv[3] || 'random', process.argv[4] || 4, process.argv[5] || 'wide'];
-configureLayout(size);
+const [mins, strat, rate, size, diff] = [process.argv[2] || 10, process.argv[3] || 'random', process.argv[4] || 4, process.argv[5] || 'wide', process.argv[6] || 'normal'];
+const { diffDef } = await import('../src/game/balance.js');
+configureLayout(size, diffDef(diff).gutter || 0);
 
 globalThis.document = globalThis.document || { documentElement: {} };
 const { PusherPhysics } = await import('../src/core/physics.js');
@@ -40,6 +41,7 @@ const proxy = new Proxy({}, { get: (t, k) => k === 'then' ? undefined : (t[k] ||
 const save = newSave();
 save.coins = 100000;
 for (const k of ['maxWallet_0', 'maxWallet_1', 'maxWallet_2']) save.achievements[k] = 1; // don't count wallet achievements
+save.settings.difficulty = diff;
 save.settings.f_login = false; save.settings.f_hints = false; save.settings.f_regen = false;
 const tally = {};
 const roulette = { active: false, run: async idx => { const { ROULETTE } = await import('../src/game/balance.js'); return ROULETTE[idx]; } };
@@ -117,10 +119,10 @@ for (let f = 0; f < frames; f++) {
 const st = save.stats;
 const dropped = st.dropped || 0;
 const net = save.coins - start;
-console.log(`strategy=${strat} size=${size} ${mins}min rate=${rate}/s  sim ${(performance.now() - t0) / 1000 | 0}s`);
+console.log(`difficulty=${diff} strategy=${strat} size=${size} ${mins}min rate=${rate}/s  sim ${(performance.now() - t0) / 1000 | 0}s`);
 console.log(`dropped ${dropped}  net ${net}  return ${((dropped + net) / dropped * 100).toFixed(1)}%  level ${save.level}  objs ${phys.objs.length}`);
 console.log('income by source', JSON.stringify(tally));
-console.log('stats', JSON.stringify({ gate: st.gatePasses, spins: st.slotSpins, wins: st.slotWins, jp: st.jpLottery, jpWins: st.jpWins, fevers: st.fevers, items: st.items, lost: st.lost, dice: st.diceRolls, laps: st.roadLaps, events: st.events, pockets: st.pockets, plinko: st.plinkos, catches: st.catches, wheels: st.wheels, towers: st.towers, shakes: st.shakes, croonBest: st.croonBest, cranes: st.cranes, grabs: st.craneGrabs, flips: st.flips }));
+console.log('stats', JSON.stringify({ gate: st.gatePasses, spins: st.slotSpins, wins: st.slotWins, jp: st.jpLottery, jpWins: st.jpWins, fevers: st.fevers, items: st.items, lost: st.lost, dice: st.diceRolls, laps: st.roadLaps, events: st.events, pockets: st.pockets, plinko: st.plinkos, catches: st.catches, wheels: st.wheels, towers: st.towers, shakes: st.shakes, croonBest: st.croonBest, cranes: st.cranes, grabs: st.craneGrabs, flips: st.flips, rocks: st.rocks }));
 const ex = Object.entries(tally).filter(([k]) => k !== 'achievement').reduce((a, [, v]) => a + v, 0);
 console.log(`return excl. achievements: ${((ex) / dropped * 100).toFixed(1)}%  (board-only win: ${((tally.win || 0) / dropped * 100).toFixed(1)}%)`);
 console.log('timeline', marks.join(' '));

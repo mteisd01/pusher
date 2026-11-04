@@ -1,6 +1,6 @@
 // Physics core (Rapier). Pure logic, no DOM: used by the worker, the inline
 // fallback and the headless balance simulator (tools/sim.mjs).
-import { L, KIND, POCKET, GIANT, CUP, cupXAt, BALLP, CRANE, TURNTABLE, FLIPPER, PACK_HEAD } from './layout.js';
+import { L, KIND, POCKET, GIANT, CUP, cupXAt, BALLP, CRANE, TURNTABLE, FLIPPER, PACK_HEAD, ROCK } from './layout.js';
 
 export class PusherPhysics {
   constructor(RAPIER, opts = {}) {
@@ -324,15 +324,17 @@ export class PusherPhysics {
       }
       case KIND.CHEST:
         d = R.ColliderDesc.cuboid(0.55, 0.4, 0.4).setDensity(1.2); break;
+      case KIND.ROCK:
+        d = R.ColliderDesc.roundCuboid(ROCK.hx - ROCK.border, ROCK.hy - ROCK.border, ROCK.hz - ROCK.border, ROCK.border).setDensity(ROCK.density); break;
       case KIND.TOKEN:
         d = R.ColliderDesc.roundCylinder(0.11 - L.coinBorder, 0.68 - L.coinBorder, L.coinBorder).setDensity(2); break;
       default:
         d = R.ColliderDesc.roundCylinder(L.coinHH - L.coinBorder, L.coinR - L.coinBorder, L.coinBorder).setDensity(2);
     }
     if (kind !== KIND.BALL) d.setRestitution(0.04);
-    const thr = kind === KIND.GIANT ? 200 : kind === KIND.BIG ? 90 : kind === KIND.BALL ? 60 : kind === KIND.CHEST ? 50 : 22;
+    const thr = kind === KIND.GIANT ? 200 : kind === KIND.BIG || kind === KIND.ROCK ? 90 : kind === KIND.BALL ? 60 : kind === KIND.CHEST ? 50 : 22;
     d.setActiveEvents(this.R.ActiveEvents.CONTACT_FORCE_EVENTS).setContactForceEventThreshold(thr);
-    return d.setFriction(kind === KIND.BALL ? BALLP.friction : 0.3);
+    return d.setFriction(kind === KIND.BALL ? BALLP.friction : kind === KIND.ROCK ? 0.45 : 0.3);
   }
 
   spawn(kind, x, y, z, q, v, extra = 0, flags = 0, angv) {

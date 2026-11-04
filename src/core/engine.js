@@ -1,6 +1,7 @@
 // Message-driven wrapper around PusherPhysics; shared by worker and inline mode.
 import RAPIER from '@dimforge/rapier3d-compat';
 import { PusherPhysics } from './physics.js';
+import { configureLayout } from './layout.js';
 import { CroonPhysics } from './croonPhysics.js';
 import { PlinkoPhysics } from './plinkoPhysics.js';
 
@@ -12,6 +13,8 @@ export function createEngine(post) {
     switch (msg.t) {
       case 'init': {
         await RAPIER.init();
+        // the worker has its own copy of the layout module: apply the table size / difficulty gutter
+        if (msg.layout) configureLayout(msg.layout.size, msg.layout.gutter);
         phys = new PusherPhysics(RAPIER, { hz: msg.hz, iterations: msg.iterations });
         phys.strokeBonus = msg.stroke || 0;
         if (msg.snapshot && msg.snapshot.objs && msg.snapshot.objs.length) phys.restore(msg.snapshot);

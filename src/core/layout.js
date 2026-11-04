@@ -26,17 +26,20 @@ export const L = {
 export const TABLE_SIZES = { wide: 11, normal: 9, compact: 7 };
 // narrower tables get shorter side gutters so that the base payout stays comparable
 const GUTTER = { wide: -1.4, normal: 0.1, compact: 1.0 };
-export function configureLayout(size) {
+// gutter: extra gutter length from the difficulty (higher tiers: the side walls end earlier)
+export function configureLayout(size, gutter = 0) {
   if (!TABLE_SIZES[size]) size = 'wide';
   L.halfW = TABLE_SIZES[size];
-  L.sideWallEnd = GUTTER[size];
+  L.sideWallEnd = GUTTER[size] - gutter;
 }
 
 // Object kinds
 export const KIND = {
-  SILVER: 0, GOLD: 1, RAINBOW: 2, BIG: 3, BALL: 4, GEM: 5, CHEST: 6, TOKEN: 7, GIANT: 8,
+  SILVER: 0, GOLD: 1, RAINBOW: 2, BIG: 3, BALL: 4, GEM: 5, CHEST: 6, TOKEN: 7, GIANT: 8, ROCK: 9,
 };
-export const KIND_COUNT = 9;
+export const KIND_COUNT = 10;
+// Rock block (falling rocks on the higher difficulties, boss attacks): heavy worthless obstacle
+export const ROCK = { hx: 0.48, hy: 0.32, hz: 0.42, border: 0.07, density: 2.6 };
 // Center pocket (a hole in the field with a lid that opens periodically)
 export const POCKET = { x: 0, z: 2.6, hw: 0.95, hd: 0.75 };
 // Moving catcher cup over the pusher shelf (catch plane y, z of its centre, catch radius)

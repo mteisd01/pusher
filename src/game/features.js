@@ -18,6 +18,7 @@ export class Features {
     this.pocketOpen = false;
     this.bonusT = 0;
     this.bonusX = 0;
+    this.rockT = null;
   }
   get s() { return this.g.settings; }
   get save() { return this.g.save; }
@@ -53,6 +54,12 @@ export class Features {
         if (this.nextEvent <= 0) this.startEvent();
       }
     }
+    // falling rocks (higher difficulties)
+    const rk = g.diff.rocks;
+    if (rk) {
+      if (this.rockT === null) this.rockT = rand(...rk);
+      if (!this.busy && (this.rockT -= dt) <= 0) { this.rockT = rand(...rk); this.dropRock(); }
+    } else this.rockT = null;
     // pocket cycle
     if (s.f_bonusZone) {
       this.pocketT -= dt;
@@ -73,6 +80,7 @@ export class Features {
   // ---------- center pocket ----------
   onPocket(e) {
     const g = this.g;
+    if (e.kind === KIND.ROCK) { g.ui.popup('ROCK', e.x, 1.2, 2.6, '#c8b89a', 1.2); g.audio.thump(0, 0.4, 90); return; }
     g.prog.add('pockets');
     g.credit(B.value[e.kind] || 1, 'pocket');
     const r = Math.random();
@@ -165,6 +173,18 @@ export class Features {
     g.physics.cmd('spawn', KIND.GIANT, rand(-4, 4), 7.5, rand(-1, 1.5), null, { x: 0, y: -4, z: 0 }, 0, 0, { x: rand(-1, 1), y: 0, z: rand(-1, 1) });
     g.ui.banner(t('ev_giant'), '#ffd34d', 2);
     setTimeout(() => { g.stage.addShake(0.9); g.audio.thump(0, 0.8, 70); g.vibrate([80, 40, 80]); }, 600);
+  }
+
+  // a heavy worthless rock falls onto the field (it blocks medals until pushed off)
+  dropRock(x) {
+    const g = this.g;
+    if (x === undefined) x = rand(-(L.halfW - 2), L.halfW - 2);
+    const z = rand(L.pusherFrontMax + 1.0, L.frontZ - 2.6);
+    const a = Math.random() * Math.PI * 2;
+    g.physics.cmd('spawn', KIND.ROCK, x, 7.5, z, { x: 0, y: Math.sin(a / 2), z: 0, w: Math.cos(a / 2) }, { x: 0, y: -3, z: 0 }, 0, 0, { x: rand(-2, 2), y: rand(-1, 1), z: rand(-2, 2) });
+    g.objCount++;
+    g.ui.banner(t('rockFall'), '#c8b89a', 1.4);
+    setTimeout(() => { g.stage.addShake(0.35); g.audio.thump(x / L.halfW * 0.8, 0.7, 55); g.vibrate(40); }, 650);
   }
 
   // ---------- random events ----------

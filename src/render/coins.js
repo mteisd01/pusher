@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { L, KIND, TOKEN_COUNT, GIANT, PACK_HEAD } from '../core/layout.js';
+import { L, KIND, TOKEN_COUNT, GIANT, PACK_HEAD, ROCK } from '../core/layout.js';
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { makeCoinGeometry, makeGemGeometry } from './coinGeometry.js';
 import { makeCoinFace, makeCoinEdge, makeTokenFace, makeBallTexture, makeChestTexture } from './textures.js';
 
@@ -21,7 +22,7 @@ export const TOKEN_STYLE = [
 export const GEM_COLORS = ['#ff1744', '#2979ff', '#00e676', '#ffc400', '#d500f9', '#e8f6ff'];
 
 const TRAY_CAP = 240;
-const CAP = { [KIND.SILVER]: 1400, [KIND.GOLD]: 500, [KIND.RAINBOW]: 120, [KIND.BIG]: 60, [KIND.BALL]: 16, [KIND.GEM]: 60, [KIND.CHEST]: 30, [KIND.GIANT]: 6 };
+const CAP = { [KIND.SILVER]: 1400, [KIND.GOLD]: 500, [KIND.RAINBOW]: 120, [KIND.BIG]: 60, [KIND.BALL]: 16, [KIND.GEM]: 60, [KIND.CHEST]: 30, [KIND.GIANT]: 6, [KIND.ROCK]: 12 };
 
 export class CoinRenderer {
   constructor(scene, quality = 'high') {
@@ -90,6 +91,8 @@ export class CoinRenderer {
     const chestTex = makeChestTexture();
     const chestMat = new THREE.MeshStandardMaterial({ map: chestTex, metalness: 0.25, roughness: 0.55 });
     this._inst(KIND.CHEST, new THREE.BoxGeometry(1.1, 0.8, 0.8), chestMat, true);
+    // Rock block
+    this._inst(KIND.ROCK, makeRockGeometry(), new THREE.MeshStandardMaterial({ map: makeRockTexture(), roughness: 0.92, metalness: 0.05, flatShading: true }), true);
     this.gemColors = GEM_COLORS.map(c => new THREE.Color(c));
     // payout tray: won medals pile up in front of the player (visual only)
     this.trayMeshes = [silverMats, goldMats].map(mats => {
@@ -222,6 +225,40 @@ export class CoinRenderer {
     }
     this.tokenMeshes.forEach((m, i) => { m.count = Math.min(tcounts[i], 12); m.instanceMatrix.needsUpdate = true; });
   }
+}
+
+// craggy rounded box (same size as the physics collider); vertices displaced by a position hash
+// so that coincident vertices stay together
+function makeRockGeometry() {
+  const g = new RoundedBoxGeometry(ROCK.hx * 2, ROCK.hy * 2, ROCK.hz * 2, 2, ROCK.border * 1.6);
+  const p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+    const h = Math.sin(x * 37.1 + y * 91.7 + z * 53.3) * 43758.5453;
+    const k = 1 + ((h - Math.floor(h)) - 0.5) * 0.14;
+    p.setXYZ(i, x * k, y * k, z * k);
+  }
+  g.computeVertexNormals();
+  return g;
+}
+function makeRockTexture() {
+  const c = document.createElement('canvas'); c.width = c.height = 256;
+  const g = c.getContext('2d');
+  g.fillStyle = '#6d6458'; g.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 900; i++) {
+    const v = 70 + Math.random() * 70 | 0;
+    g.fillStyle = `rgba(${v + 10},${v},${v - 12},${0.25 + Math.random() * 0.4})`;
+    g.beginPath(); g.arc(Math.random() * 256, Math.random() * 256, 1 + Math.random() * 7, 0, Math.PI * 2); g.fill();
+  }
+  g.strokeStyle = 'rgba(25,20,15,.7)'; g.lineWidth = 2;
+  for (let i = 0; i < 7; i++) {
+    let x = Math.random() * 256, y = Math.random() * 256;
+    g.beginPath(); g.moveTo(x, y);
+    for (let k = 0; k < 6; k++) { x += (Math.random() - 0.5) * 50; y += (Math.random() - 0.5) * 50; g.lineTo(x, y); }
+    g.stroke();
+  }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  return t;
 }
 
 function compose(te, o, x, y, z, qx, qy, qz, qw) {

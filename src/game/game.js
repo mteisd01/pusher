@@ -1,7 +1,7 @@
 // Central game orchestrator: input -> physics -> events -> rewards -> presentation
 import * as THREE from 'three';
 import { L, KIND, TOKEN } from '../core/layout.js';
-import { B, ITEM_TABLE, ROULETTE, UPGRADES, upgradeCost, WHEEL, WHEEL_NEED, COIN_TOWER, COASTER_ROUTES, CRANE_PLAY, ballExit } from './balance.js';
+import { B, ITEM_TABLE, ROULETTE, UPGRADES, upgradeCost, WHEEL, WHEEL_NEED, COIN_TOWER, COASTER_ROUTES, CRANE_PLAY, ballExit, diffDef, ROCK_REWARD } from './balance.js';
 import { Progression } from './progression.js';
 import { Slot } from './slot.js';
 import { Features } from './features.js';
@@ -51,7 +51,7 @@ export class Game {
   }
 
   get settings() { return this.save.settings; }
-  get diff() { return B.difficulty[this.settings.difficulty] || B.difficulty.normal; }
+  get diff() { return diffDef(this.settings.difficulty); }
   upg(id) { return this.prog.upg(id); }
   stockMax() { return B.stockBase + this.upg('stock'); }
   gateHalf() { return (B.gate.half + B.gate.halfPerLv * this.upg('gate')) * Math.pow(L.halfW / 11, 1.2) * this.diff.gate * (this.fx.fever > 0 ? 1.6 : 1) * this.features.gateMult(); }
@@ -59,7 +59,7 @@ export class Game {
   slotLuck() { return (1 + 0.06 * this.upg('luck') + this.prog.gemLuck()) * this.diff.slot * (this.fx.fever > 0 ? 1.4 : 1); }
   itemRate() { return (B.itemRate + B.itemRatePerLv * this.upg('item')) * this.diff.item; }
   autoRate() { return B.autoRateBase + B.autoRatePerLv * this.upg('auto'); }
-  regenCap() { return B.regen.capBase + B.regen.capPerLv * this.upg('regen'); }
+  regenCap() { return Math.round((B.regen.capBase + B.regen.capPerLv * this.upg('regen')) * this.diff.regen); }
   regenSec() { return B.regen.secBase - B.regen.secPerLv * this.upg('regen'); }
   jpBase() { return B.jp.base + B.jp.basePerLv * this.upg('jp'); }
   theme() { return themeById(this.settings.theme); }
@@ -77,7 +77,7 @@ export class Game {
       const lb = this.prog.checkLogin();
       if (lb) setTimeout(() => this.ui.showLogin(lb, () => {
         this.credit(lb.reward, 'login');
-        if (lb.gem) this.spawnItem(KIND.GEM, this.prog.rollGem());
+        if (lb.gem) this.spawnItem(KIND.GEM, this.prog.rollGem(Math.random, this.diff.gem));
         this.audio.levelUp();
       }), 900);
     }
@@ -129,7 +129,7 @@ export class Game {
     this.vibrate(8);
     this.prog.add('dropped', k);
     this.prog.addXp(k);
-    if (this.settings.f_jp) this.save.jpPool += B.jp.growPerDrop * k * (1 + Object.keys(this.save.gems).length * 0.01);
+    if (this.settings.f_jp) this.save.jpPool += B.jp.growPerDrop * k * (1 + Object.keys(this.save.gems).length * 0.01) * this.diff.jp;
     if (this.settings.f_items && Math.random() < this.itemRate() * k) this.spawnRandomItem();
     this.dropsSinceSave = (this.dropsSinceSave || 0) + 1;
   }
@@ -142,7 +142,7 @@ export class Game {
   }
   spawnItem(kind, extra = 0) {
     if (kind === KIND.BALL) { this.launchBall(); return; }
-    if (kind === KIND.GEM && extra === 0) extra = this.prog.rollGem();
+    if (kind === KIND.GEM && extra === 0) extra = this.prog.rollGem(Math.random, this.diff.gem);
     this.physics.cmd('spawn', kind, rand(-(L.halfW - 1.5), L.halfW - 1.5), 6.5, rand(L.backWallZ + 1.2, L.pusherFrontMin - 0.8), tiltQ(0.4), { x: 0, y: -1, z: 0 }, extra, 0);
   }
   // JP balls never start on the shelf (a ball rolls in place on the moving pusher):
@@ -273,7 +273,7 @@ export class Game {
       this.save.stock++;
       this.audio.gate();
     } else {
-      this.save.jpPool += 2;
+      this.save.jpPool += 2 * this.diff.jp;
       this.audio.stock();
     }
   }
@@ -283,7 +283,7 @@ export class Game {
     if (e.pocket && s.f_bonusZone) { this.features.onPocket(e); return; }
     if (!e.won) {
       this.prog.add('lost');
-      if (e.kind >= KIND.BALL) { this.toast('💨', t('lostItem')); this.audio.lost(); }
+      if (e.kind >= KIND.BALL && e.kind !== KIND.ROCK) { this.toast('💨', t('lostItem')); this.audio.lost(); }
       return;
     }
     const mult = this.fx.double > 0 ? 2 : 1;
@@ -307,6 +307,13 @@ export class Game {
         this.payoutFlash += e.kind === KIND.SILVER ? 0.15 : 0.6;
         break;
       }
+      case KIND.ROCK:
+        this.prog.add('rocks');
+        this.credit(ROCK_REWARD, 'rock');
+        this.ui.popup(`ROCK +${ROCK_REWARD}`, e.x, 0.6, L.frontZ, '#c8b89a', 1.3);
+        this.audio.thump(e.x / L.halfW * 0.8, 0.5, 80);
+        this.effects.burst(...fxPos, '#9e8b6e', 24, 4, 0.7, 0.9);
+        break;
       case KIND.BALL:
         this.prog.add('items');
         if (s.f_jp) { this.jpQueue++; this.backboard.message(t('jpChance'), '#ffd34d', 2, 80); this.audio.itemGet(); }
@@ -373,7 +380,7 @@ export class Game {
     switch (tok) {
       case TOKEN.WALL:
         if (!s.f_walls) { this.shower(10); break; }
-        this.fx.walls += B.walls.dur + B.walls.durPerLv * this.upg('wall');
+        this.fx.walls += (B.walls.dur + B.walls.durPerLv * this.upg('wall')) * this.diff.walls;
         this.prog.add('walls'); this.audio.wall();
         break;
       case TOKEN.SHOWER: this.shower(25); break;

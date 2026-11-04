@@ -6,7 +6,7 @@ import { BallCoaster } from './render/coaster.js';
 import { CraneRig } from './render/crane.js';
 import { FieldDevices } from './render/fieldDevices.js';
 import { Plinko3D } from './render/plinko3d.js';
-import { WHEEL, WHEEL_NEED, PLINKO } from './game/balance.js';
+import { WHEEL, WHEEL_NEED, PLINKO, diffDef } from './game/balance.js';
 import { CUP, PACK_HEAD } from './core/layout.js';
 import { TRAY, POLE_X } from './render/cabinet.js';
 import { CoinRenderer } from './render/coins.js';
@@ -40,7 +40,9 @@ async function boot() {
   const q = s.quality === 'auto' ? detectQuality() : s.quality;
   if (QUALITY_PRESETS[q] && (s.quality === 'auto' || !save._qualityApplied)) Object.assign(s, QUALITY_PRESETS[q]);
   save._qualityApplied = true;
-  configureLayout(s.tableSize);
+  // the difficulty changes the side-gutter length
+  const gutter = diffDef(s.difficulty).gutter || 0;
+  configureLayout(s.tableSize, gutter);
 
   // share-link import: #save=CODE
   let pendingImport = null;
@@ -69,7 +71,7 @@ async function boot() {
   const physics = new PhysicsClient();
   const boardKey = s.tableSize;
   let board = loadBoardFor(boardKey);
-  await physics.init({ worker: s.worker, hz: s.physHz, iterations: 2, stroke: (save.upgrades.stroke || 0) * 0.3, snapshot: board, prefill: s.prefill });
+  await physics.init({ layout: { size: s.tableSize, gutter }, worker: s.worker, hz: s.physHz, iterations: 2, stroke: (save.upgrades.stroke || 0) * 0.3, snapshot: board, prefill: s.prefill });
   setLoad(t('loading'), 0.9);
 
   const uiRoot = document.getElementById('ui');
@@ -159,6 +161,7 @@ async function boot() {
       case 'leftHand': case 'highContrast': case 'reduceMotion': case 'uiScale': case 'dropButton': case 'showFps': ui.applyLayout(); break;
       case 'f_missions': game.prog.ensureMissions(); break;
       case 'tableSize': persist(); unloading = true; location.reload(); return;
+      case 'difficulty': if ((diffDef(st.difficulty).gutter || 0) !== gutter) { persist(); unloading = true; location.reload(); return; } break;
       case 'antialias': case 'worker': break;
     }
     persist();

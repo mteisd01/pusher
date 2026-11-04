@@ -38,6 +38,7 @@ tiers('shakes', [[1, 20], [30, 300]], '🌋');
 tiers('cranes', [[1, 30], [25, 400]], '🏗');
 tiers('craneGrabs', [[30, 60], [500, 600]], '🦾');
 tiers('coasters', [[1, 20], [50, 400]], '🎢');
+tiers('rocks', [[1, 20], [20, 300]], '🪨');
 export const ACHIEVEMENTS = A;
 
 const MISSION_POOL = [
@@ -83,7 +84,7 @@ export class Progression {
 
   addXp(n) {
     const s = this.s;
-    s.xp += n;
+    s.xp += n * (this.g.diff ? this.g.diff.xp : 1);
     let ups = 0;
     while (s.xp >= xpForLevel(s.level)) {
       s.xp -= xpForLevel(s.level);
@@ -178,10 +179,12 @@ export class Progression {
   }
 
   // ---- gems ----
-  rollGem(rnd = Math.random) {
+  // boost (difficulty reward): rarity r is boost^r times more likely
+  rollGem(rnd = Math.random, boost = 1) {
     const type = Math.floor(rnd() * 6);
-    let r = rnd() * GEM_RARITY_W.reduce((a, b) => a + b), rarity = 0;
-    for (let i = 0; i < GEM_RARITY_W.length; i++) { if ((r -= GEM_RARITY_W[i]) < 0) { rarity = i; break; } }
+    const w = GEM_RARITY_W.map((x, i) => x * Math.pow(boost, i));
+    let r = rnd() * w.reduce((a, b) => a + b), rarity = 0;
+    for (let i = 0; i < w.length; i++) { if ((r -= w[i]) < 0) { rarity = i; break; } }
     return type * 4 + rarity;
   }
   collectGem(code) {
@@ -189,7 +192,10 @@ export class Progression {
     const isNew = !this.s.gems[id];
     this.s.gems[id] = (this.s.gems[id] || 0) + 1;
     const rarity = code % 4, type = Math.floor(code / 4);
-    const reward = (isNew ? GEM_REWARD_NEW : GEM_REWARD_DUP)[rarity];
+    // duplicates of boosted rarities pay proportionally less, so the rarity boost speeds up the
+    // collection without inflating the coin income
+    const boost = this.g.diff ? this.g.diff.gem : 1;
+    const reward = isNew ? GEM_REWARD_NEW[rarity] : Math.max(1, Math.round(GEM_REWARD_DUP[rarity] / Math.pow(boost, rarity)));
     this.add('gems');
     this.dirtyAch = true;
     let setBonus = 0;
@@ -200,7 +206,7 @@ export class Progression {
     return { isNew, reward, rarity, type, setBonus };
   }
   // permanent bonus from collection: +1% slot luck per unique gem
-  gemLuck() { return Object.keys(this.s.gems).length * 0.01 + Object.keys(this.s.gemSets).length * 0.03; }
+  gemLuck() { return Math.min(0.25, Object.keys(this.s.gems).length * 0.01 + Object.keys(this.s.gemSets).length * 0.03); }
 }
 
 function hash(s) { let h = 2166136261; for (const c of String(s)) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; }

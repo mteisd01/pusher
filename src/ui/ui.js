@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import qrcode from 'qrcode-generator';
 import { t, setLang, getLang } from '../i18n.js';
-import { UPGRADES, upgradeCost, xpForLevel } from '../game/balance.js';
+import { UPGRADES, upgradeCost, xpForLevel, DIFFICULTIES, diffDef } from '../game/balance.js';
 import { ACHIEVEMENTS } from '../game/progression.js';
 import { THEMES } from '../render/themes.js';
 import { GEM_COLORS, TOKEN_STYLE } from '../render/coins.js';
@@ -49,7 +49,7 @@ export class UI {
     this.hud.innerHTML = `
       <div class="hud-tl panel">
         <div class="coins"><span class="ico">${ICONS.coin}</span><span class="val" id="hCoins">0</span></div>
-        <div class="lvrow"><span class="lv" id="hLv">Lv1</span><span class="title" id="hTitle"></span></div>
+        <div class="lvrow"><span class="dbadge hidden" id="hDiff"></span><span class="lv" id="hLv">Lv1</span><span class="title" id="hTitle"></span></div>
         <div class="xpbar"><i id="hXp"></i></div>
       </div>
       <div class="hud-fx" id="hFx"></div>
@@ -153,6 +153,13 @@ export class UI {
     $('#hCoins', this.hud).textContent = fmt(s.coins);
     $('#hLv', this.hud).textContent = `Lv${s.level}`;
     $('#hTitle', this.hud).textContent = t('t_' + g.prog.title());
+    const dd = g.diff, db = $('#hDiff', this.hud);
+    if (db.dataset.k !== g.settings.difficulty) {
+      db.dataset.k = g.settings.difficulty;
+      db.textContent = getLang() === 'ja' ? dd.badge : (dd.badge ? t('d_' + g.settings.difficulty).toUpperCase() : '');
+      db.style.setProperty('--dc', dd.color);
+      db.classList.toggle('hidden', !dd.badge);
+    }
     $('#hXp', this.hud).style.width = `${Math.min(100, s.xp / xpForLevel(s.level) * 100)}%`;
     $('#bAuto', this.hud).classList.toggle('on', !!g.settings.autoDrop);
     // fx chips
@@ -343,7 +350,7 @@ export class UI {
   tab_stats(body) {
     const g = this.game, st = g.save.stats;
     const time = s => { s = Math.floor(s || 0); return `${Math.floor(s / 3600)}h ${Math.floor(s / 60) % 60}m`; };
-    const rows = [['coasters'], ['cranes'], ['craneGrabs'], ['catches'], ['wheels'], ['towers'], ['shakes'], ['diceRolls'], ['roadLaps'], ['events'], ['challenges'], ['pockets'], ['plinkos'], ['croonBest'], ['dropped'], ['won'], ['lost'], ['payout', st.dropped ? `${((st.won || 0) / st.dropped * 100).toFixed(1)}%` : '-'], ['gatePasses'], ['slotSpins'], ['slotWins'], ['sevens'], ['jpLottery'], ['jpWins'], ['fevers'], ['maxCombo'], ['items'], ['gems'], ['chests'], ['biggestWin'], ['maxWallet'], ['playTime', time(st.playTime)]];
+    const rows = [['rocks'], ['coasters'], ['cranes'], ['craneGrabs'], ['catches'], ['wheels'], ['towers'], ['shakes'], ['diceRolls'], ['roadLaps'], ['events'], ['challenges'], ['pockets'], ['plinkos'], ['croonBest'], ['dropped'], ['won'], ['lost'], ['payout', st.dropped ? `${((st.won || 0) / st.dropped * 100).toFixed(1)}%` : '-'], ['gatePasses'], ['slotSpins'], ['slotWins'], ['sevens'], ['jpLottery'], ['jpWins'], ['fevers'], ['maxCombo'], ['items'], ['gems'], ['chests'], ['biggestWin'], ['maxWallet'], ['playTime', time(st.playTime)]];
     body.innerHTML = `<div class="stats">` + rows.map(([k, v]) => `<div class="srow"><span>${t('st_' + k)}</span><b>${v !== undefined ? v : fmt(st[k] || 0)}</b></div>`).join('') + `</div>`;
   }
 
@@ -392,7 +399,7 @@ export class UI {
         ['holdRepeat', 'toggle'], ['dropButton', 'toggle'], ['showBeam', 'toggle'], ['vibrate', 'toggle'], ['leftHand', 'toggle'], ['uiScale', 'range', 0.7, 1.4, 0.05],
       ]],
       ['g_features', [
-        ['difficulty', 'select', ['easy', 'normal', 'hard'].map(v => [v, t('d_' + v)])],
+        ['difficulty', 'select', DIFFICULTIES.map(v => [v, t('d_' + v)])],
         ['f_slot', 'toggle'], ['slotFast', 'toggle'], ['f_jp', 'toggle'], ['f_croon', 'toggle'], ['f_tower3d', 'toggle'], ['towerCam', 'toggle'], ['f_catcher', 'toggle'], ['f_wheel', 'toggle'], ['f_hopper', 'toggle'], ['f_mechReels', 'toggle'], ['f_beacons', 'toggle'], ['f_coaster', 'toggle'], ['f_crane', 'toggle'], ['f_plinko3d', 'toggle'], ['f_turntable', 'toggle'], ['f_flipper', 'toggle'], ['f_meterTube', 'toggle'], ['jpSkip', 'toggle'], ['f_sugoroku', 'toggle'], ['f_events', 'toggle'], ['f_plinko', 'toggle'], ['f_bonusZone', 'toggle'], ['f_items', 'toggle'], ['f_gems', 'toggle'], ['f_fever', 'toggle'], ['f_walls', 'toggle'],
         ['sideLoss', 'toggle'], ['f_combo', 'toggle'], ['f_missions', 'toggle'], ['f_login', 'toggle'], ['f_regen', 'toggle'],
         ['f_achievePopups', 'toggle'], ['f_floatText', 'toggle'], ['f_hints', 'toggle'],
@@ -418,6 +425,14 @@ export class UI {
       html += '</div>';
     }
     body.innerHTML = html;
+    // what the selected difficulty changes and gives
+    const dsel = body.querySelector('[data-k="difficulty"]');
+    if (dsel) {
+      const note = h('div', 'dnote diffnote');
+      dsel.closest('.srow').after(note);
+      const fill = () => { note.innerHTML = this.diffNote(dsel.value); };
+      dsel.addEventListener('change', fill); fill();
+    }
     body.querySelectorAll('[data-k]').forEach(el => {
       const key = el.dataset.k;
       const ev = el.type === 'range' ? 'input' : 'change';
@@ -431,6 +446,20 @@ export class UI {
         if (key === 'quality') this.renderTab();
       });
     });
+  }
+
+  diffNote(id) {
+    const d = diffDef(id), ja = getLang() === 'ja';
+    const x = v => `×${+v.toFixed(2)}`;
+    const parts = [esc(t('dd_' + id))];
+    const rw = [];
+    if (d.xp !== 1) rw.push(`${ja ? '経験値' : 'XP'} ${x(d.xp)}`);
+    if (d.jp !== 1) rw.push(`${ja ? 'JPの伸び' : 'JP growth'} ${x(d.jp)}`);
+    if (d.gem !== 1) rw.push(`${ja ? '宝石のレア度' : 'Gem rarity'} ${x(d.gem)}`);
+    if (rw.length) parts.push(`<b>${ja ? '見返り' : 'Rewards'}</b>: ${rw.join(' / ')}`);
+    if (d.badge) parts.push(`<b>${ja ? '限定' : 'Exclusive'}</b>: ${esc(t('diffExclusive'))}`);
+    if (d.gutter) parts.push(esc(t('diffReload')));
+    return parts.join('<br>');
   }
 
   tab_data(body) {
