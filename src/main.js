@@ -2,8 +2,12 @@ import './ui/style.css';
 import { Stage, CAMERA_PRESETS, SCREEN } from './render/scene.js';
 import { CroonTower } from './render/tower.js';
 import { MechReels, Hopper, LuckyWheel, CatcherCup, Beacons } from './render/machines.js';
-import { WHEEL, WHEEL_NEED } from './game/balance.js';
-import { CUP } from './core/layout.js';
+import { BallCoaster } from './render/coaster.js';
+import { CraneRig } from './render/crane.js';
+import { FieldDevices } from './render/fieldDevices.js';
+import { Plinko3D } from './render/plinko3d.js';
+import { WHEEL, WHEEL_NEED, PLINKO } from './game/balance.js';
+import { CUP, PACK_HEAD } from './core/layout.js';
 import { TRAY, POLE_X } from './render/cabinet.js';
 import { CoinRenderer } from './render/coins.js';
 import { Backboard } from './render/backboard.js';
@@ -102,7 +106,11 @@ async function boot() {
     wheel: new LuckyWheel(stage.scene, SCREEN, WHEEL),
     cup: new CatcherCup(stage.scene),
     beacons: new Beacons(stage.scene, [[-POLE_X(W0), 12.0, L.backWallZ - 1.5], [POLE_X(W0), 12.0, L.backWallZ - 1.5]]),
+    coaster: new BallCoaster(stage.scene, audio, W0),
+    crane: new CraneRig(stage.scene, W0),
   };
+  machines.field = new FieldDevices(stage.scene, W0, machines.wheel.group.position);
+  game.plinko3d = new Plinko3D(stage.scene, stage, audio, SCREEN, PLINKO);
   game.machines = machines;
   mini.isPaused = () => game.paused;
   physics.onFrame = msg => game.onPhysicsFrame(msg);
@@ -272,6 +280,7 @@ async function boot() {
 
   // ---------- main loop ----------
   let last = performance.now(), fps = 60, frameAcc = 0, cupSent = null, cupX = 0;
+  const dev = new Float32Array(10);
   function loop(now) {
     requestAnimationFrame(loop);
     let dt = (now - last) / 1000;
@@ -291,6 +300,7 @@ async function boot() {
     let pz, gy, lidY;
     if (buf) {
       coins.update(buf); pz = buf[1]; gy = buf[2]; lidY = buf[4]; cupX = buf[5];
+      for (let i = 0; i < 10; i++) dev[i] = buf[6 + i];
       if (!paused) audio.pusherDrive(buf[3]);
       sparkleAcc += dt;
       if (sparkleAcc > 0.12) { sparkleAcc = 0; emitSparkles(buf); }
@@ -322,6 +332,12 @@ async function boot() {
       for (const b of M.beacons.items) b.g.visible = !!s.f_beacons;
       if (s.f_beacons) M.beacons.update(dt, game.beaconMode());
       if (s.f_catcher !== cupSent) { physics.cmd('cup', !!s.f_catcher); cupSent = s.f_catcher; }
+      M.coaster.group.visible = !!s.f_coaster;
+      M.coaster.update(dt);
+      M.crane.group.visible = !!s.f_crane;
+      if (s.f_crane) M.crane.update(dt, [dev[0], dev[1], dev[2], dev[3]], dev[9] > 0);
+      M.field.update(dt, { kickZ: dev[4], kickX: dev[5], ttAngle: dev[6], flipL: dev[7], flipR: dev[8], ttOn: game.ttSent, tt: !!s.f_turntable, flip: !!s.f_flipper, meter: save.wheelMeter || 0, meterOn: !!(s.f_meterTube && s.f_wheel && s.f_catcher) }, {});
+      game.plinko3d.update(dt);
     }
     stage.render();
     ui.update(dt, { fps });
@@ -336,7 +352,7 @@ async function boot() {
   function emitSparkles(b) {
     if (s.reduceMotion) return;
     const n = b[0] | 0;
-    for (let i = 0, o = 8; i < n; i++, o += 10) {
+    for (let i = 0, o = PACK_HEAD; i < n; i++, o += 10) {
       const k = b[o + 1] | 0;
       if (k < 2 || Math.random() > 0.35) continue;
       const col = k === 5 ? ['#ff1744', '#2979ff', '#00e676', '#ffc400', '#d500f9', '#ffffff'][Math.floor(b[o + 2] / 4) % 6] : SPARK[k];

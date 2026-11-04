@@ -1,8 +1,9 @@
 // All tunable game-balance numbers live here.
-import { KIND, TOKEN } from '../core/layout.js';
+import { L, KIND, TOKEN } from '../core/layout.js';
 
 export const B = {
   startCoins: 120,
+  flipperDur: 12,            // seconds the gutter flippers kick
   dropCost: 1,
   holdInterval: 0.2,          // seconds between drops while holding
   autoRateBase: 1.6,          // drops / s
@@ -34,7 +35,7 @@ export const SYM_COUNT = 8;
 // Outcomes: weight per 1000 spins (base), and payout description
 export const SLOT_TABLE = [
   { sym: SYM.SEVEN, w: 4, kind: 'fever', shower: 12 },
-  { sym: SYM.JP, w: 8, kind: 'ball' },
+  { sym: SYM.JP, w: 5, kind: 'ball' },
   { sym: SYM.BAR, w: 15, kind: 'shower', shower: 8 },
   { sym: SYM.BELL, w: 30, kind: 'shower', shower: 3, dice: 1 },
   { sym: SYM.CHERRY, w: 60, kind: 'shower', shower: 2 },
@@ -74,12 +75,14 @@ export const ITEM_TABLE = [
   { kind: KIND.GEM, w: 22 },
   { kind: KIND.CHEST, w: 10 },
   { kind: KIND.BIG, w: 6 },
-  { kind: KIND.BALL, w: 3 },
+  { kind: KIND.BALL, w: 2 },
   { kind: KIND.TOKEN, extra: TOKEN.PLINKO, w: 6 },
   { kind: KIND.TOKEN, extra: TOKEN.DICE, w: 8 },
   { kind: KIND.TOKEN, extra: TOKEN.MAGNET, w: 6 },
   { kind: KIND.TOKEN, extra: TOKEN.BOMB, w: 6 },
   { kind: KIND.TOKEN, extra: TOKEN.SHAKE, w: 6 },
+  { kind: KIND.TOKEN, extra: TOKEN.CRANE, w: 5 },
+  { kind: KIND.TOKEN, extra: TOKEN.FLIPPER, w: 6 },
 ];
 
 export const GEM_RARITY_W = [62, 27, 9, 2];
@@ -117,7 +120,7 @@ export const ROAD = [
   { t: 'coin', n: 5, color: '#c79100' }, { t: 'stock', color: '#00838f' }, { t: 'again', color: '#ef6c00' },
   { t: 'gem', color: '#ad1457' }, { t: 'back', n: 3, color: '#b71c1c' }, { t: 'ball', color: '#37474f' },
   { t: 'coin', n: 6, color: '#c79100' }, { t: 'event', color: '#4527a0' }, { t: 'shower', n: 8, color: '#2e7d32' },
-  { t: 'item', color: '#1565c0' }, { t: 'back', n: 4, color: '#b71c1c' }, { t: 'fever', color: '#d81b60' },
+  { t: 'crane', color: '#d81b60' }, { t: 'back', n: 4, color: '#b71c1c' }, { t: 'fever', color: '#d81b60' },
   { t: 'coin', n: 8, color: '#c79100' }, { t: 'back', n: 2, color: '#b71c1c' }, { t: 'again', color: '#ef6c00' },
   { t: 'giant', color: '#8d6e00' }, { t: 'boss', color: '#000000' },
 ];
@@ -150,24 +153,46 @@ export const EVENTS = [
   { id: 'challenge', w: 3, dur: 30 },
   { id: 'tower', w: 3, dur: 8 },
   { id: 'quake', w: 2, dur: 7 },
+  { id: 'crane', w: 2, dur: 4 },
+  { id: 'spinField', w: 2, dur: 20 },
 ];
 
 // Lucky wheel beside the screen: spun after WHEEL_NEED medals fell into the catcher cup
 export const WHEEL_NEED = 12;
 export const WHEEL = [
-  { label: '3', n: 3, w: 26, color: '#c62828' },
+  { label: '3', n: 3, w: 22, color: '#c62828' },
+  { label: 'CRANE', crane: true, w: 8, color: '#d81b60' },
   { label: 'ITEM', item: true, w: 10, color: '#1565c0' },
-  { label: '10', n: 10, w: 16, color: '#ef6c00' },
+  { label: '10', n: 10, w: 14, color: '#ef6c00' },
   { label: 'TOWER', tower: true, w: 10, color: '#6a1b9a' },
-  { label: '3', n: 3, w: 26, color: '#c62828' },
+  { label: '3', n: 3, w: 22, color: '#c62828' },
+  { label: 'FLIP', flipper: true, w: 6, color: '#5c6bc0' },
   { label: 'DICE', dice: 1, w: 6, color: '#2e7d32' },
   { label: '25', n: 25, w: 4, color: '#ad1457' },
-  { label: 'SHAKE', shake: true, w: 12, color: '#00838f' },
+  { label: 'SHAKE', shake: true, w: 10, color: '#00838f' },
   { label: '×2', double: 8, w: 6, color: '#4527a0' },
   { label: 'BALL', ball: true, w: 2, color: '#f9a825' },
 ];
 // Medal tower (event / wheel): stacked medals dropped onto the pusher shelf
 export const COIN_TOWER = { coins: 10, gold: 2 };
+// Ball coaster switch: where a JP ball goes (jp/chance weights grow with the luck upgrades)
+export const COASTER_ROUTES = [{ id: 'field', w: 60 }, { id: 'chance', w: 32 }, { id: 'jp', w: 8 }];
+// Crane chance: max medals the claw can hold, chance per medal to slip while lifting
+export const CRANE_PLAY = { maxGrab: 15, slip: 0.3 };
 export const EVENT_INTERVAL = [200, 400];   // seconds
 export const POCKET_CYCLE = { closed: 35, open: 6 };
 export const BONUS_ZONE = { half: 1.0, period: 7, mult: 2, stockChance: 0.12 };
+
+// Ball coaster exits: where a JP ball enters the main table (field = side ramp just in front of
+// the pusher, chance = lane near the front edge). pushMax = current max pusher front z.
+export const BALL_EXIT = {
+  field: { dx: 2.2, y: 1.9, z: 1.9, v: [4.5, 6.5] },
+  chance: { dx: 2.2, y: 1.9, z: 3.2, v: [3.5, 6.0] },
+};
+export function ballExit(route, pushMax, rand = Math.random) {
+  const R = (a, b) => a + rand() * (b - a);
+  const W = L.halfW;
+  const ex = BALL_EXIT[route] || BALL_EXIT.field;
+  const z = Math.max(ex.z, pushMax + 0.9);
+  return { x: W - ex.dx, y: ex.y, z, v: { x: -R(ex.v[0], ex.v[1]), y: -1, z: R(0, 0.5) } };
+}

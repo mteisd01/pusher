@@ -1,6 +1,6 @@
 // Physics core (Rapier). Pure logic, no DOM: used by the worker, the inline
 // fallback and the headless balance simulator (tools/sim.mjs).
-import { L, KIND, POCKET, GIANT, CUP, cupXAt } from './layout.js';
+import { L, KIND, POCKET, GIANT, CUP, cupXAt, BALLP, CRANE, TURNTABLE, FLIPPER, PACK_HEAD } from './layout.js';
 
 export class PusherPhysics {
   constructor(RAPIER, opts = {}) {
@@ -56,6 +56,7 @@ export class PusherPhysics {
     this.lidY = -0.5; this.pocketOpen = false;
     this.magnet = false;
     this.cupOn = false; this.cupX = 0;
+    this.kickAfter = 30;
     this._box(W + 1, L.wallH / 2, 0.5, 0, L.pusherH + 0.07 + L.wallH / 2, L.backWallZ - 0.5, 0.15, 0.1, 3); // back wall over pusher
     this._box(W + 1, L.wallH / 2, 0.5, 0, L.wallH / 2, L.backZ - 0.5, 0.15, 0.1, 3);       // rear
     for (const s of [-1, 1]) {
@@ -76,6 +77,225 @@ export class PusherPhysics {
       R.ColliderDesc.cuboid(W - 0.02, L.pusherH / 2 - 0.005, L.pusherLen / 2).setFriction(0.4).setRestitution(0.02), this.pusher);
     this.surf.set(pc.handle, 1);
     this.pusherCol = pc.handle;
+    this._buildDevices();
+  }
+
+  // ---------------------------------------------------------------- on-table devices
+  _kin(x, y, z) { return this.world.createRigidBody(this.R.RigidBodyDesc.kinematicPositionBased().setTranslation(x, y, z)); }
+
+  _buildDevices() {
+    const R = this.R, W = L.halfW;
+    // ball kicker: a plunger hidden in the back wall over the shelf
+    this.kick = { body: this._kin(0, L.pusherH + 0.45, L.backWallZ - 0.9), state: 0, t: 0, x: 0, z: L.backWallZ - 0.9 };
+    const kc = this.world.createCollider(R.ColliderDesc.cuboid(0.75, 0.33, 0.5).setFriction(0.2), this.kick.body);
+    this.surf.set(kc.handle, 3);
+    // turntables (slightly raised discs, they only turn while active)
+    this.turntables = [];
+    this.ttOn = false; this.ttAngle = 0;
+    for (const sx of [-1, 1]) {
+      const x = sx * (W - TURNTABLE.dx);
+      const b = this._kin(x, 0.0, TURNTABLE.z);
+      const c = this.world.createCollider(R.ColliderDesc.roundCylinder(0.006, TURNTABLE.r - 0.01, 0.01).setTranslation(0, 0, 0).setFriction(0.45), b);
+      this.surf.set(c.handle, 1);
+      this.turntables.push({ body: b, x, w: -sx * TURNTABLE.w });
+    }
+    // gutter flippers
+    this.flippers = [];
+    this.flipOn = false; this.flipT = 0;
+    for (const sx of [-1, 1]) {
+      const f = { side: sx, a: FLIPPER.rest, px: sx * (W + 0.2), pz: L.sideWallEnd + 0.35, body: null };
+      f.body = this._kin(0, -3, 0);
+      const c = this.world.createCollider(R.ColliderDesc.cuboid(0.1, 0.22, FLIPPER.len / 2).setFriction(0.2).setRestitution(0.3), f.body);
+      this.surf.set(c.handle, 3);
+      this._placeFlipper(f, true);
+      this.flippers.push(f);
+    }
+    // crane claw: three kinematic fingers
+    this.crane = { phase: 'idle', x: -(W - CRANE.parkDx), z: CRANE.parkZ, y: CRANE.idleY, tx: 0, claw: 1, t: 0, grabbed: [], fingers: [], slip: 0.25, maxGrab: 15, dropX: 0 };
+    for (let i = 0; i < 3; i++) {
+      const b = this._kin(0, CRANE.idleY - 0.5, CRANE.parkZ);
+      const c = this.world.createCollider(R.ColliderDesc.capsule(CRANE.finger / 2, 0.08).setFriction(0.5), b);
+      this.surf.set(c.handle, 3);
+      this.crane.fingers.push(b);
+    }
+    this._placeClaw();
+  }
+
+  _placeFlipper(f, now) {
+    // bar from the pivot along direction a (0 = +z, positive = towards the table centre)
+    const dx = -f.side * Math.sin(f.a), dz = Math.cos(f.a), h = FLIPPER.len / 2;
+    const pos = { x: f.px + dx * h, y: 0.22, z: f.pz + dz * h };
+    const yaw = Math.atan2(dx, dz), q = { x: 0, y: Math.sin(yaw / 2), z: 0, w: Math.cos(yaw / 2) };
+    if (now) { f.body.setTranslation(pos, true); f.body.setRotation(q, true); }
+    else { f.body.setNextKinematicTranslation(pos); f.body.setNextKinematicRotation(q); }
+  }
+
+  _placeClaw() {
+    const c = this.crane, open = 1 - c.claw;
+    for (let i = 0; i < 3; i++) {
+      const a = i / 3 * Math.PI * 2 + 0.3;
+      const tilt = -0.25 + open * 0.75;          // outward tilt of the finger
+      const ca = Math.cos(a), sa = Math.sin(a), half = CRANE.finger / 2 + 0.08;
+      const r = CRANE.hubR * 0.8 + Math.sin(tilt) * half;
+      const pos = { x: c.x + ca * r, y: c.y - Math.cos(tilt) * half, z: c.z + sa * r };
+      // rotate the capsule (y axis) by tilt around the tangent (-sa, 0, ca)
+      const s2 = Math.sin(-tilt / 2), q = { x: -sa * s2, y: 0, z: ca * s2, w: Math.cos(-tilt / 2) };
+      c.fingers[i].setNextKinematicTranslation(pos);
+      c.fingers[i].setNextKinematicRotation(q);
+    }
+  }
+
+  // highest surface/object top under the claw
+  _craneFloor() {
+    const c = this.crane;
+    let top = c.z < this.pusherFrontAt(this.phase) - 0.3 ? L.pusherH : 0;
+    for (const o of this.objs) {
+      if (Math.hypot(o.x - c.x, o.z - c.z) < CRANE.grabR && o.y < 4) top = Math.max(top, o.y + (o.kind === KIND.BALL ? 0.6 : 0.1));
+    }
+    return top;
+  }
+
+  craneStart(maxGrab = 15, slip = 0.25) {
+    const c = this.crane;
+    if (c.phase !== 'idle') return;
+    Object.assign(c, { phase: 'aim', t: 0, maxGrab, slip, tx: c.x });
+  }
+  craneAim(x) { this.crane.tx = Math.max(-(L.halfW - 1.1), Math.min(L.halfW - 1.1, x)); }
+  craneDrop() { const c = this.crane; if (c.phase === 'aim') { c.phase = 'down'; c.t = 0; c.stopY = this._craneStop(); } }
+  // claw height where the finger tips just dig into whatever is below (shelf, floor or pile)
+  _craneStop() {
+    const c = this.crane, surf = c.z < this.pusherFrontAt(this.phase) - 0.3 ? L.pusherH : 0;
+    return Math.max(this._craneFloor() - 0.35, surf) + CRANE.finger + 0.05;
+  }
+
+  _setKinematic(o, on) {
+    const T = this.R.RigidBodyType;
+    o.body.setBodyType(on ? T.KinematicPositionBased : T.Dynamic, true);
+  }
+
+  _craneStep(h, ev) {
+    const c = this.crane;
+    if (c.phase === 'idle') return;
+    c.t += h;
+    const mv = (cur, tgt, sp) => cur + Math.sign(tgt - cur) * Math.min(Math.abs(tgt - cur), sp * h);
+    switch (c.phase) {
+      case 'aim': {
+        c.claw = Math.max(0, c.claw - h / 0.5);
+        c.x = mv(c.x, c.tx, 7);
+        // front-back sweep (starts at the back end, eases in from the park position)
+        const mid = (CRANE.z0 + CRANE.z1) / 2, amp = (CRANE.z1 - CRANE.z0) / 2;
+        const zt = mid - Math.cos(c.t * CRANE.sweep * Math.PI) * amp;
+        c.z = mv(c.z, zt, 6);
+        if (c.t > 10) this.craneDrop();
+        break;
+      }
+      case 'down':
+        if (c.y - c.stopY < 1.5) c.stopY = this._craneStop();   // the pusher may move under the claw
+        c.y = mv(c.y, c.stopY, 4.5);
+        if (Math.abs(c.y - c.stopY) < 1e-3 || c.t > 2.5) { c.phase = 'close'; c.t = 0; ev.push({ t: 'crane', ph: 'close', x: c.x, z: c.z }); }
+        break;
+      case 'close':
+        c.claw = Math.min(1, c.claw + h / 0.45);
+        if (c.claw >= 1) {
+          // grab what is inside the claw (items first)
+          const tipY = c.y - CRANE.finger;
+          const cand = this.objs.filter(o => !o.dead && !o.grab && Math.hypot(o.x - c.x, o.z - c.z) < CRANE.grabR && o.y > tipY - 0.45 && o.y < c.y + 0.3)
+            .sort((a, b) => (b.kind > KIND.GOLD) - (a.kind > KIND.GOLD) || Math.hypot(a.x - c.x, a.z - c.z) - Math.hypot(b.x - c.x, b.z - c.z))
+            .slice(0, c.maxGrab);
+          for (const o of cand) {
+            const t = o.body.translation();
+            o.grab = { dx: t.x - c.x, dy: t.y - c.y, dz: t.z - c.z, slipAt: Math.random() < c.slip * (0.5 + Math.hypot(t.x - c.x, t.z - c.z) / CRANE.grabR) ? 0.2 + Math.random() * 1.2 : -1 };
+            this._setKinematic(o, true);
+            c.grabbed.push(o);
+          }
+          ev.push({ t: 'crane', ph: 'grab', n: cand.length, items: cand.filter(o => o.kind > KIND.GOLD).length });
+          c.phase = 'up'; c.t = 0;
+        }
+        break;
+      case 'up':
+        c.y = mv(c.y, CRANE.idleY, 3);
+        if (c.y >= CRANE.idleY - 1e-3) { c.phase = 'carry'; c.t = 0; c.dropX = Math.max(-(L.halfW - 1.5), Math.min(L.halfW - 1.5, c.x)); }
+        break;
+      case 'carry':
+        c.x = mv(c.x, c.dropX, 5); c.z = mv(c.z, L.frontZ - 1.4, 5);
+        if (Math.abs(c.z - (L.frontZ - 1.4)) < 1e-3 && Math.abs(c.x - c.dropX) < 1e-3) { c.phase = 'open'; c.t = 0; }
+        break;
+      case 'open':
+        c.claw = Math.max(0, c.claw - h / 0.3);
+        if (c.claw < 0.6 && c.grabbed.length) { for (const o of c.grabbed) this._release(o, { x: 0, y: -1, z: 0.6 }); c.grabbed.length = 0; ev.push({ t: 'crane', ph: 'drop', x: c.x }); }
+        if (c.claw <= 0 && c.t > 0.8) { c.phase = 'return'; c.t = 0; }
+        break;
+      case 'return': {
+        const px = -(L.halfW - CRANE.parkDx);
+        c.claw = Math.min(1, c.claw + h / 0.6);
+        c.x = mv(c.x, px, 7); c.z = mv(c.z, CRANE.parkZ, 7);
+        if (Math.abs(c.z - CRANE.parkZ) < 1e-3 && Math.abs(c.x - px) < 1e-3) { c.phase = 'idle'; ev.push({ t: 'crane', ph: 'done' }); }
+        break;
+      }
+    }
+    // carried objects follow the claw (and may slip while lifting / carrying)
+    if (c.grabbed.length) {
+      const sway = c.phase === 'carry' ? Math.sin(c.t * 9) * 0.03 : 0;
+      for (let i = c.grabbed.length - 1; i >= 0; i--) {
+        const o = c.grabbed[i], g = o.grab;
+        if (o.dead || !g) { c.grabbed.splice(i, 1); continue; }
+        if (g.slipAt >= 0 && (c.phase === 'up' || c.phase === 'carry') && (c.phase === 'carry' || c.t > g.slipAt)) {
+          if (c.phase === 'up' || Math.random() < h * 0.8) { this._release(o, { x: (Math.random() - 0.5) * 0.6, y: c.phase === 'up' ? 2 : 0, z: c.phase === 'carry' ? 3 : 0 }); c.grabbed.splice(i, 1); continue; }
+        }
+        o.body.setNextKinematicTranslation({ x: c.x + g.dx + sway, y: c.y + g.dy, z: c.z + g.dz });
+      }
+    }
+    this._placeClaw();
+  }
+
+  _release(o, v) {
+    o.grab = null;
+    if (o.dead) return;
+    this._setKinematic(o, false);
+    o.body.setLinvel(v, true);
+    o.body.setAngvel({ x: (Math.random() - 0.5) * 4, y: 0, z: (Math.random() - 0.5) * 4 }, true);
+    o.rest = false; o.body.setAngularDamping(o.kind === KIND.BALL ? BALLP.angDamp : 0.3); o.body.setLinearDamping(0.04);
+  }
+
+  _devicesStep(h, ev) {
+    // kicker: push a JP ball that has stayed on the shelf too long
+    const k = this.kick;
+    for (const o of this.objs) {
+      if (o.kind !== KIND.BALL || o.grab) continue;
+      if (this._onShelf(o)) o.shelfT = (o.shelfT || 0) + h; else o.shelfT = 0;
+      if (BALLP.tilt && o.y < 1.6 && o.z > this.pusherFrontAt(this.phase) - 0.2) o.body.applyImpulse({ x: 0, y: 0, z: o.body.mass() * BALLP.tilt * h }, true);
+      if (k.state === 0 && o.shelfT > this.kickAfter) { k.state = 1; k.t = 0; k.x = Math.max(-(L.halfW - 0.8), Math.min(L.halfW - 0.8, o.x)); o.shelfT = 0; ev.push({ t: 'kick', x: k.x }); }
+    }
+    if (k.state !== 0) {
+      k.t += h;
+      const z0 = L.backWallZ - 0.9, z1 = L.pusherFrontMin - 1.0;
+      let f;
+      if (k.t < 0.15) f = 0;                       // ready (lamp flashes)
+      else if (k.t < 0.95) { const u = (k.t - 0.15) / 0.8; f = u * u * (3 - 2 * u); }
+      else if (k.t < 1.25) f = 1;
+      else if (k.t < 2.25) f = 1 - (k.t - 1.25);
+      else { f = 0; k.state = 0; }
+      k.z = z0 + (z1 - z0) * f;
+      k.body.setNextKinematicTranslation({ x: k.x, y: L.pusherH + 0.45, z: k.z });
+    }
+    // turntables
+    if (this.ttOn) {
+      this.ttAngle += h;
+      for (const t of this.turntables) { const a = this.ttAngle * t.w; t.body.setNextKinematicRotation({ x: 0, y: Math.sin(a / 2), z: 0, w: Math.cos(a / 2) }); }
+    }
+    // flippers
+    if (this.flipOn || this.flippers[0].a !== FLIPPER.rest) {
+      this.flipT += h;
+      const ph = this.flipT % FLIPPER.period;
+      let a;
+      if (!this.flipOn) a = FLIPPER.rest;
+      else if (ph < 0.2) a = FLIPPER.rest + (FLIPPER.kick - FLIPPER.rest) * Math.sin(ph / 0.2 * Math.PI / 2);
+      else if (ph < 0.75) a = FLIPPER.kick - (FLIPPER.kick - FLIPPER.rest) * (ph - 0.2) / 0.55;
+      else a = FLIPPER.rest;
+      if (ph < h && this.flipOn) ev.push({ t: 'flip' });
+      for (const f of this.flippers) { f.a = !this.flipOn ? f.a + Math.sign(FLIPPER.rest - f.a) * Math.min(Math.abs(FLIPPER.rest - f.a), h * 3) : a; this._placeFlipper(f); }
+    }
+    this._craneStep(h, ev);
   }
 
   strokeRange() { return [L.pusherFrontMin, L.pusherFrontMax + this.strokeBonus]; }
@@ -94,7 +314,7 @@ export class PusherPhysics {
       case KIND.GIANT:
         d = R.ColliderDesc.roundCylinder(GIANT.hh - 0.04, GIANT.r - 0.04, 0.04).setDensity(3.2); break;
       case KIND.BALL:
-        d = R.ColliderDesc.ball(0.6).setDensity(1.6).setRestitution(0.15); break;
+        d = R.ColliderDesc.ball(BALLP.r).setDensity(BALLP.density).setRestitution(BALLP.restitution); break;
       case KIND.GEM: {
         const p = [], r = 0.5, h = 0.38;
         for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2; p.push(Math.cos(a) * r, 0.06, Math.sin(a) * r); }
@@ -112,12 +332,12 @@ export class PusherPhysics {
     if (kind !== KIND.BALL) d.setRestitution(0.04);
     const thr = kind === KIND.GIANT ? 200 : kind === KIND.BIG ? 90 : kind === KIND.BALL ? 60 : kind === KIND.CHEST ? 50 : 22;
     d.setActiveEvents(this.R.ActiveEvents.CONTACT_FORCE_EVENTS).setContactForceEventThreshold(thr);
-    return d.setFriction(kind === KIND.BALL ? 0.5 : 0.3);
+    return d.setFriction(kind === KIND.BALL ? BALLP.friction : 0.3);
   }
 
   spawn(kind, x, y, z, q, v, extra = 0, flags = 0, angv) {
     const R = this.R;
-    const bd = R.RigidBodyDesc.dynamic().setTranslation(x, y, z).setLinearDamping(0.04).setAngularDamping(kind === KIND.BALL ? 0.6 : 0.3);
+    const bd = R.RigidBodyDesc.dynamic().setTranslation(x, y, z).setLinearDamping(0.04).setAngularDamping(kind === KIND.BALL ? BALLP.angDamp : 0.3);
     if (q) bd.setRotation(q);
     if (v) bd.setLinvel(v.x, v.y, v.z);
     if (angv) bd.setAngvel(angv);
@@ -201,6 +421,7 @@ export class PusherPhysics {
         this.lid.setNextKinematicTranslation({ x: POCKET.x, y: this.lidY, z: POCKET.z });
       }
       if (this.magnet) this._magnet(h);
+      this._devicesStep(h, ev);
       this.cupX = cupXAt(this.time);
       for (const g of this.guards) {
         const ty = this.wallsUp ? 1.25 : -7;
@@ -295,7 +516,7 @@ export class PusherPhysics {
   // they rest on) nearly still get heavy damping; anything really moving gets normal damping.
   _restDamping() {
     for (const o of this.objs) {
-      if (o.kind === KIND.BALL) continue;
+      if (o.kind === KIND.BALL || o.grab) continue;
       const v = o.body.linvel(), a = o.body.angvel();
       const vz = v.z - (this._onShelf(o) ? this.pusherVz : 0);
       const lin = Math.hypot(v.x, v.y, vz), ang = Math.hypot(a.x, a.y, a.z);
@@ -344,7 +565,7 @@ export class PusherPhysics {
 
   // Pack transforms: [id, kind, extra, x, y, z, qx, qy, qz, qw] per object
   pack(buf) {
-    const list = this.objs, need = list.length * 10 + 8;
+    const list = this.objs, need = list.length * 10 + PACK_HEAD;
     if (!buf || buf.length < need) buf = new Float32Array(Math.ceil(need * 1.3));
     buf[0] = list.length;
     buf[1] = this.pusher.translation().z;
@@ -352,7 +573,12 @@ export class PusherPhysics {
     buf[3] = this.phase;
     buf[4] = this.lidY;
     buf[5] = this.cupX;
-    let k = 8;
+    const c = this.crane;
+    buf[6] = c.x; buf[7] = c.z; buf[8] = c.y; buf[9] = c.claw;
+    buf[10] = this.kick.z; buf[11] = this.kick.x;
+    buf[12] = this.ttAngle; buf[13] = this.flippers[0].a; buf[14] = this.flippers[1].a;
+    buf[15] = c.phase === 'idle' ? 0 : c.phase === 'aim' ? 1 : 2;
+    let k = PACK_HEAD;
     for (const o of list) {
       const t = o.body.translation(), r = o.body.rotation();
       buf[k++] = o.id; buf[k++] = o.kind; buf[k++] = o.extra;

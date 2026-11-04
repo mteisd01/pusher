@@ -35,6 +35,9 @@ tiers('catches', [[1, 20], [50, 300], [500, 2000]], '🥅');
 tiers('wheels', [[1, 30], [25, 300], [200, 2000]], '🎡');
 tiers('towers', [[1, 30], [20, 300]], '🗼');
 tiers('shakes', [[1, 20], [30, 300]], '🌋');
+tiers('cranes', [[1, 30], [25, 400]], '🏗');
+tiers('craneGrabs', [[30, 60], [500, 600]], '🦾');
+tiers('coasters', [[1, 20], [50, 400]], '🎢');
 export const ACHIEVEMENTS = A;
 
 const MISSION_POOL = [
@@ -51,6 +54,7 @@ const MISSION_POOL = [
   { id: 'diceRolls', base: [3, 6, 10], feat: 'f_sugoroku' },
   { id: 'catches', base: [3, 6, 12], feat: 'f_catcher' },
   { id: 'wheels', base: [1, 2, 3], feat: 'f_wheel' },
+  { id: 'craneGrabs', base: [5, 10, 20], feat: 'f_crane' },
   { id: 'events', base: [1, 2, 3], feat: 'f_events' },
 ];
 

@@ -26,6 +26,11 @@ const physics = {
       case 'blast': phys.blast(c[1], c[2], c[3], c[4]); break;
       case 'cup': phys.cupOn = !!c[1]; break;
       case 'shake': phys.shake(c[1]); break;
+      case 'craneStart': phys.craneStart(c[1], c[2]); break;
+      case 'craneAim': phys.craneAim(c[1]); break;
+      case 'craneDrop': phys.craneDrop(); break;
+      case 'turntable': phys.ttOn = !!c[1]; break;
+      case 'flippers': phys.flipOn = !!c[1]; if (c[1]) phys.flipT = 0; break;
       default: if (phys['cmd_' + c[0]]) phys['cmd_' + c[0]](...c.slice(1));
     }
   },
@@ -66,7 +71,15 @@ const tower = {
   },
 };
 const game = new Game({ stage: proxy, coins: proxy, backboard: proxy, effects: proxy, audio: proxy, physics, ui: proxy, save, roulette, mini, tower });
-game.machines = { wheel: { spin: async () => {} }, cup: {} };
+// ball coaster: hands the ball over at the real exit points right away
+const { ballExit } = await import('../src/game/balance.js');
+const routes = {};
+const coaster = { busy: false, launch: (route, cb) => { routes[route] = (routes[route] || 0) + 1; if (route === 'jp') return cb(route, null, null); const e = ballExit(route, phys.strokeRange()[1]); cb(route, { x: e.x, y: e.y, z: e.z }, e.v); } };
+game.machines = { wheel: { spin: async () => {} }, cup: {}, coaster };
+// the real plinko physics (random drop position)
+const { PlinkoPhysics, PLINKO_BOARD } = await import('../src/core/plinkoPhysics.js');
+const plk = new PlinkoPhysics(RAPIER);
+game.plinko3d = { setAim() {}, run: async () => { plk.drop((Math.random() * 2 - 1) * PLINKO_BOARD.aim); let r = null; while (!r) r = plk.step(1 / 60); return r.slot; } };
 physics.cmd('cup', true);
 const credit = game.credit.bind(game);
 game.credit = (n, src) => { tally[src] = (tally[src] || 0) + Math.round(n); credit(n, src); };
@@ -107,10 +120,11 @@ const net = save.coins - start;
 console.log(`strategy=${strat} size=${size} ${mins}min rate=${rate}/s  sim ${(performance.now() - t0) / 1000 | 0}s`);
 console.log(`dropped ${dropped}  net ${net}  return ${((dropped + net) / dropped * 100).toFixed(1)}%  level ${save.level}  objs ${phys.objs.length}`);
 console.log('income by source', JSON.stringify(tally));
-console.log('stats', JSON.stringify({ gate: st.gatePasses, spins: st.slotSpins, wins: st.slotWins, jp: st.jpLottery, jpWins: st.jpWins, fevers: st.fevers, items: st.items, lost: st.lost, dice: st.diceRolls, laps: st.roadLaps, events: st.events, pockets: st.pockets, plinko: st.plinkos, catches: st.catches, wheels: st.wheels, towers: st.towers, shakes: st.shakes, croonBest: st.croonBest }));
+console.log('stats', JSON.stringify({ gate: st.gatePasses, spins: st.slotSpins, wins: st.slotWins, jp: st.jpLottery, jpWins: st.jpWins, fevers: st.fevers, items: st.items, lost: st.lost, dice: st.diceRolls, laps: st.roadLaps, events: st.events, pockets: st.pockets, plinko: st.plinkos, catches: st.catches, wheels: st.wheels, towers: st.towers, shakes: st.shakes, croonBest: st.croonBest, cranes: st.cranes, grabs: st.craneGrabs, flips: st.flips }));
 const ex = Object.entries(tally).filter(([k]) => k !== 'achievement').reduce((a, [, v]) => a + v, 0);
 console.log(`return excl. achievements: ${((ex) / dropped * 100).toFixed(1)}%  (board-only win: ${((tally.win || 0) / dropped * 100).toFixed(1)}%)`);
 console.log('timeline', marks.join(' '));
+console.log('ball routes', JSON.stringify(routes));
 if (steady) {
   const d = (save.stats.dropped || 0) - steady.dropped, n = save.coins - steady.coins - ((tally.achievement || 0) - steady.ach);
   console.log(`steady-state return from minute 8 (excl. achievements): ${((d + n) / d * 100).toFixed(1)}%`);

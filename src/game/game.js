@@ -1,7 +1,7 @@
 // Central game orchestrator: input -> physics -> events -> rewards -> presentation
 import * as THREE from 'three';
 import { L, KIND, TOKEN } from '../core/layout.js';
-import { B, ITEM_TABLE, ROULETTE, UPGRADES, upgradeCost, WHEEL, WHEEL_NEED, COIN_TOWER } from './balance.js';
+import { B, ITEM_TABLE, ROULETTE, UPGRADES, upgradeCost, WHEEL, WHEEL_NEED, COIN_TOWER, COASTER_ROUTES, CRANE_PLAY, ballExit } from './balance.js';
 import { Progression } from './progression.js';
 import { Slot } from './slot.js';
 import { Features } from './features.js';
@@ -19,7 +19,7 @@ export class Game {
     this.balance = B;
     this.prog = new Progression(this);
     this.slot = new Slot(this);
-    this.fx = { fever: 0, walls: 0, turbo: 0, double: 0 };
+    this.fx = { fever: 0, walls: 0, turbo: 0, double: 0, flipper: 0 };
     this.time = 0;
     this.aimX = 0; this.launcherX = 0;
     this.holding = false; this.holdTimer = 0; this.autoTimer = 0; this.sweep = 0;
@@ -35,6 +35,7 @@ export class Game {
     this.wallsSent = null; this.speedSent = null;
     this.pauseReasons = new Set();
     this.strokeCoins = 0;
+    this.devMode = null;          // 'crane' | 'plinko' while an on-table device takes the input
     this.features = new Features(this);
   }
 
@@ -85,9 +86,19 @@ export class Game {
   }
 
   // ---------- input ----------
-  setAim(x) { this.aimX = Math.max(-(L.halfW - 0.7), Math.min(L.halfW - 0.7, x)); }
+  setAim(x) {
+    this.aimX = Math.max(-(L.halfW - 0.7), Math.min(L.halfW - 0.7, x));
+    if (this.devMode === 'plinko' && this.plinko3d) this.plinko3d.setAimWorld(this.aimX);
+  }
   press(x) {
-    if (this.paused || this.overlayBusy) return;
+    if (this.paused) return;
+    if (this.devMode) {
+      if (x !== undefined) this.setAim(x);
+      if (this.devMode === 'crane') { this.physics.cmd('craneAim', this.aimX); this.physics.cmd('craneDrop'); }
+      else if (this.devMode === 'plinko' && this.plinko3d) this.plinko3d.drop();
+      return;
+    }
+    if (this.overlayBusy) return;
     if (x !== undefined) this.setAim(x);
     this.launcherX = this.aimX;
     this.drop();
@@ -130,9 +141,62 @@ export class Game {
     for (let i = 0; i < n; i++) this.showerQueue.push(kind);
   }
   spawnItem(kind, extra = 0) {
+    if (kind === KIND.BALL) { this.launchBall(); return; }
     if (kind === KIND.GEM && extra === 0) extra = this.prog.rollGem();
     this.physics.cmd('spawn', kind, rand(-(L.halfW - 1.5), L.halfW - 1.5), 6.5, rand(L.backWallZ + 1.2, L.pusherFrontMin - 0.8), tiltQ(0.4), { x: 0, y: -1, z: 0 }, extra, 0);
   }
+  // JP balls never start on the shelf (a ball rolls in place on the moving pusher):
+  // they come in over the ball coaster, or straight onto the field when it is off.
+  launchBall() {
+    const co = this.settings.f_coaster && this.machines && this.machines.coaster;
+    const route = this.pickBallRoute();
+    if (co) {
+      co.launch(route, (r, pos, vel) => {
+        if (r === 'jp') { this.prog.add('items'); this.jpQueue++; this.backboard.message('JP DIRECT!', '#ffd34d', 2, 80); this.audio.itemGet(); return; }
+        this.physics.cmd('spawn', KIND.BALL, pos.x, pos.y, pos.z, null, vel, 0, 0);
+        this.objCount++;
+      });
+      this.prog.add('coasters');
+      return;
+    }
+    const e = ballExit(route === 'chance' ? 'chance' : 'field', L.pusherFrontMax + this.upg('stroke') * 0.3);
+    this.physics.cmd('spawn', KIND.BALL, e.x, e.y, e.z, null, e.v, 0, 0);
+    this.objCount++;
+  }
+  pickBallRoute() {
+    const luck = 1 + 0.1 * this.upg('luck') + 0.1 * this.upg('jp');
+    const list = COASTER_ROUTES.map(r => ({ ...r, w: r.id === 'field' ? r.w : r.w * luck }));
+    let x = Math.random() * list.reduce((a, b) => a + b.w, 0);
+    for (const r of list) if ((x -= r.w) < 0) return r.id;
+    return 'field';
+  }
+
+  // ---------- crane ----------
+  startCrane() {
+    if (!this.settings.f_crane) { this.shower(8); return; }
+    this.features.enqueue(() => this.runCrane());
+  }
+  runCrane() {
+    this.devMode = 'crane';
+    this.holding = false;
+    this.prog.add('cranes');
+    this.physics.cmd('craneStart', CRANE_PLAY.maxGrab, CRANE_PLAY.slip);
+    this.physics.cmd('craneAim', this.aimX);
+    this.backboard.message('CRANE CHANCE', '#ff4fa0', 2, 80);
+    this.ui.banner(t('craneHint'), '#ff4fa0', 2.4);
+    this.audio.brass && this.audio.brass(0, [64, 67, 72], 0.5, 0.15);
+    return new Promise(res => { this._craneDone = res; });
+  }
+  _onCrane(e) {
+    if (e.ph === 'close') { this.devMode = 'craneBusy'; this.audio.thump(0, 0.3, 140); }
+    else if (e.ph === 'grab') {
+      this.prog.add('craneGrabs', e.n);
+      this.ui.popup(e.n ? `GRAB ×${e.n}` : 'MISS…', this.aimX, 4, 0, e.n ? '#ff4fa0' : '#999', 1.3);
+      e.n ? this.audio.gate() : this.audio.lose();
+    } else if (e.ph === 'drop') { this.audio.payout(4, e.x / L.halfW * 0.8, false); this.stage.addShake(0.15); }
+    else if (e.ph === 'done') { this.devMode = null; const r = this._craneDone; this._craneDone = null; r && r(); }
+  }
+
   spawnRandomItem() {
     let table = ITEM_TABLE.filter(it => {
       if (it.kind === KIND.BALL && !this.settings.f_jp) return false;
@@ -182,6 +246,7 @@ export class Game {
   // ---------- physics events ----------
   onPhysicsFrame(msg) {
     if (msg.croon && this.tower) this.tower.onPhysics(msg.croon);
+    if (msg.plinko && this.plinko3d) this.plinko3d.onPhysics(msg.plinko);
     this.objCount = msg.n;
     this.physMs = msg.ms;
     for (const e of msg.ev) {
@@ -189,6 +254,9 @@ export class Game {
       else if (e.t === 'stroke') this._onStroke();
       else if (e.t === 'gate') this._onGate(e);
       else if (e.t === 'catch') this._onCatch(e);
+      else if (e.t === 'crane') this._onCrane(e);
+      else if (e.t === 'kick') { this.ui.popup('KICK!', e.x, 3, L.backWallZ + 1, '#ff7043', 1.2); this.audio.thump(0, 0.5, 90); this.kickWarn = 0; }
+      else if (e.t === 'flip') this.audio.thump(0, 0.12, 220);
       else if (e.t === 'hit') this.audio.impact(e, L.halfW);
       else if (e.t === 'mv') this.motion = e.v;
     }
@@ -317,6 +385,8 @@ export class Game {
       case TOKEN.DICE: if (s.f_sugoroku) this.features.addDice(2); else this.shower(8); break;
       case TOKEN.MAGNET: this.fx.magnet = (this.fx.magnet || 0) + 12; break;
       case TOKEN.SHAKE: setTimeout(() => this.tableShake(1), 500); break;
+      case TOKEN.CRANE: this.startCrane(); break;
+      case TOKEN.FLIPPER: if (s.f_flipper) { this.fx.flipper = (this.fx.flipper || 0) + B.flipperDur; this.prog.add('flips'); } else this.shower(6); break;
       case TOKEN.BOMB: {
         const x = rand(-L.halfW + 3, L.halfW - 3), z = rand(1, L.frontZ - 2.5);
         setTimeout(() => {
@@ -359,7 +429,7 @@ export class Game {
         this.shower(o.shower + (s.f_fever ? 0 : 40));
         this.audio.winBig();
         break;
-      case 'ball': this.spawnItem(KIND.BALL); this.backboard.message('JP BALL!', '#ffd34d', 2, 100); this.audio.winBig(); break;
+      case 'ball': this.launchBall(); this.backboard.message('JP BALL!', '#ffd34d', 2, 100); this.audio.winBig(); break;
       case 'shower':
         this.shower(o.shower);
         if (o.dice) this.features.addDice(o.dice);
@@ -468,6 +538,11 @@ export class Game {
     if (speed !== this.speedSent) { this.physics.cmd('speed', speed); this.speedSent = speed; }
     const mag = this.fx.magnet > 0;
     if (mag !== this.magSent) { this.physics.cmd('magnet', mag); this.magSent = mag; }
+    const flip = !!s.f_flipper && this.fx.flipper > 0;
+    if (flip !== this.flipSent) { this.physics.cmd('flippers', flip); this.flipSent = flip; }
+    const tt = !!s.f_turntable && (this.fx.fever > 0 || (this.features.event && this.features.event.id === 'spinField'));
+    if (tt !== this.ttSent) { this.physics.cmd('turntable', tt); this.ttSent = tt; }
+    if (this.devMode === 'crane') this.physics.cmd('craneAim', this.aimX);
     // gate motion (speed wobbles so that timing matters)
     this.gateX = this.gateXAt(this.time);
     this.gateFlash = Math.max(0, this.gateFlash - dt * 2.5);
@@ -540,6 +615,7 @@ export class Game {
     this.save.wheelMeter = (this.save.wheelMeter || 0) + 1;
     this.prog.add('catches');
     if (this.machines && this.machines.cup) this.machines.cup.flash = 0.8;
+    if (s.f_meterTube && this.machines && this.machines.field) this.machines.field.addCatch(e.x, 2.3, L.dropZ);
     this.ui.popup('CATCH!', e.x, 2.6, L.dropZ, '#7CFFB2', 1.2);
     this.audio.gate();
     if (s.f_wheel && this.machines && this.machines.wheel && this.save.wheelMeter >= WHEEL_NEED && !this.wheelBusy) this.spinWheel();
@@ -550,6 +626,7 @@ export class Game {
     const w = this.machines.wheel;
     this.save.wheelMeter = Math.max(0, (this.save.wheelMeter || 0) - WHEEL_NEED);
     this.wheelBusy = true;
+    if (this.machines.field) this.machines.field.empty();
     let r = Math.random() * WHEEL.reduce((a, b) => a + b.w, 0), idx = 0;
     for (let i = 0; i < WHEEL.length; i++) if ((r -= WHEEL[i].w) < 0) { idx = i; break; }
     const seg = WHEEL[idx];
@@ -566,12 +643,15 @@ export class Game {
     else if (seg.tower) this.coinTower();
     else if (seg.shake) this.tableShake(1);
     else if (seg.double) { this.fx.double += seg.double; this.audio.itemGet(); }
-    else if (seg.ball) { if (s.f_jp) { this.spawnItem(KIND.BALL); this.audio.winBig(); } else this.shower(30); }
+    else if (seg.ball) { if (s.f_jp) { this.launchBall(); this.audio.winBig(); } else this.shower(30); }
+    else if (seg.crane) this.startCrane();
+    else if (seg.flipper) this.activateToken(TOKEN.FLIPPER);
     if (this.save.wheelMeter >= WHEEL_NEED) setTimeout(() => { if (!this.wheelBusy) this.spinWheel(); }, 800);
   }
 
   beaconMode() {
     if (this.tower && this.tower.active) return 'jp';
+    if (this.devMode) return 'win';
     if (this.fx.fever > 0) return 'fever';
     if (this.features.event) return 'event';
     if (this.slot.flash > 0 || this.overlayBusy || this.wheelBusy) return 'win';

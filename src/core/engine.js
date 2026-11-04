@@ -2,9 +2,10 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { PusherPhysics } from './physics.js';
 import { CroonPhysics } from './croonPhysics.js';
+import { PlinkoPhysics } from './plinkoPhysics.js';
 
 export function createEngine(post) {
-  let phys = null, croon = null;
+  let phys = null, croon = null, plinko = null;
   let buf = null;
   const ev = [];
   const handle = async (msg, transferBack) => {
@@ -33,6 +34,12 @@ export function createEngine(post) {
           out.croon = { s: croon.state(), hole: r ? r.hole : -1 };
           if (r) croon.stop();
         }
+        if (plinko && plinko.ball) {
+          const r = plinko.active ? plinko.step(msg.dt) : null;
+          out.plinko = { s: plinko.state(), slot: r ? r.slot : -1, hits: r ? r.hits : plinko.hits || 0 };
+          plinko.hits = 0;
+          if (r) plinko.stop();
+        }
         if (msg.snap) out.snap = phys.snapshot();
         post(out, transferBack ? [buf.buffer] : undefined);
         buf = null;
@@ -58,6 +65,14 @@ export function createEngine(post) {
       case 'restore': phys.restore(c[1]); break;
       case 'croonStart': if (!croon) croon = new CroonPhysics(RAPIER); croon.start(c[1], c[2]); break;
       case 'croonStop': if (croon) croon.stop(); break;
+      case 'plinkoDrop': if (!plinko) plinko = new PlinkoPhysics(RAPIER); plinko.drop(c[1]); break;
+      case 'plinkoStop': if (plinko) plinko.stop(); break;
+      case 'craneStart': phys.craneStart(c[1], c[2]); break;
+      case 'craneAim': phys.craneAim(c[1]); break;
+      case 'craneDrop': phys.craneDrop(); break;
+      case 'turntable': phys.ttOn = !!c[1]; break;
+      case 'flippers': phys.flipOn = !!c[1]; if (c[1]) phys.flipT = 0; break;
+      case 'kickAfter': phys.kickAfter = c[1]; break;
       case 'trim': {
         // remove the oldest coins resting far from the front when over budget
         const over = phys.objs.length - c[1];

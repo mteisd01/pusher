@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { L, KIND, TOKEN_COUNT, GIANT } from '../core/layout.js';
+import { L, KIND, TOKEN_COUNT, GIANT, PACK_HEAD } from '../core/layout.js';
 import { makeCoinGeometry, makeGemGeometry } from './coinGeometry.js';
 import { makeCoinFace, makeCoinEdge, makeTokenFace, makeBallTexture, makeChestTexture } from './textures.js';
 
@@ -15,6 +15,8 @@ export const TOKEN_STYLE = [
   { color: '#d32f2f', icon: 'MAG', label: 'MAGNET' },
   { color: '#37474f', icon: 'BOM', label: 'BOMB' },
   { color: '#00838f', icon: 'SHK', label: 'SHAKE' },
+  { color: '#d81b60', icon: 'CRN', label: 'CRANE' },
+  { color: '#5c6bc0', icon: 'FLP', label: 'FLIPPER' },
 ];
 export const GEM_COLORS = ['#ff1744', '#2979ff', '#00e676', '#ffc400', '#d500f9', '#e8f6ff'];
 
@@ -195,7 +197,7 @@ export class CoinRenderer {
     const counts = {};
     const tcounts = new Array(TOKEN_COUNT).fill(0);
     for (const k in this.meshes) counts[k] = 0;
-    let off = 8;
+    let off = PACK_HEAD;
     for (let i = 0; i < n; i++, off += 10) {
       const kind = buf[off + 1] | 0, extra = buf[off + 2] | 0;
       let mesh, idx;

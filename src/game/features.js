@@ -105,6 +105,7 @@ export class Features {
       case 'item': return ja ? 'アイテム' : 'ITEM';
       case 'gem': return ja ? '宝石' : 'GEM';
       case 'plinko': return 'PLINKO';
+      case 'crane': return 'CRANE';
       case 'stock': return 'STOCK';
       case 'ball': return 'JP';
       case 'event': return 'EVENT';
@@ -149,6 +150,7 @@ export class Features {
       case 'event': if (this.s.f_events && !this.event) this.startEvent(); else g.shower(15); break;
       case 'fever': if (this.s.f_fever) g.startFever(); else g.shower(25); break;
       case 'giant': this.spawnGiant(); break;
+      case 'crane': g.startCrane(); break;
       case 'boss': {
         // the last square: big reward + JP ball
         const n = Math.round(30 * m); g.shower(Math.min(60, n)); if (n > 60) g.credit(n - 60, 'road');
@@ -184,6 +186,7 @@ export class Features {
       case 'giant': setTimeout(() => this.spawnGiant(), 1500); break;
       case 'tower': g.coinTower(rand(-(L.halfW - 2.5), -1.5)); setTimeout(() => g.coinTower(rand(1.5, L.halfW - 2.5)), 1400); break;
       case 'quake': this.event.quakes = 3; this.event.nextQuake = 1.2; break;
+      case 'crane': setTimeout(() => g.startCrane(), 1200); break;
       case 'hyper': g.physics.cmd('stroke', g.upg('stroke') * 0.3 + 1.6); break;
       case 'challenge': this.event.start = g.save.stats.won || 0; this.event.target = Math.round(18 + L.halfW * 1.2); break;
     }
@@ -231,7 +234,14 @@ export class Features {
   async plinko() {
     const g = this.g;
     g.prog.add('plinkos');
-    const p = await g.mini.plinko(PLINKO);
+    let p;
+    if (this.s.f_plinko3d && g.plinko3d) {
+      g.devMode = 'plinko'; g.holding = false;
+      g.plinko3d.setAim(0);
+      const slot = await g.plinko3d.run(g.physics, { camera: this.s.towerCam });
+      g.devMode = null;
+      p = PLINKO[slot] || PLINKO[4];
+    } else p = await g.mini.plinko(PLINKO);
     if (p.ball) { if (this.s.f_jp) g.spawnItem(KIND.BALL); else g.shower(30); g.ui.banner('JP BALL!', '#ffd34d'); g.audio.winBig(); }
     else { g.shower(p.n); g.ui.banner(`+${p.n}`, '#ffd34d'); p.n >= 15 ? g.audio.winBig() : g.audio.win('small'); }
   }

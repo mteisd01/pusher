@@ -343,7 +343,7 @@ export class UI {
   tab_stats(body) {
     const g = this.game, st = g.save.stats;
     const time = s => { s = Math.floor(s || 0); return `${Math.floor(s / 3600)}h ${Math.floor(s / 60) % 60}m`; };
-    const rows = [['catches'], ['wheels'], ['towers'], ['shakes'], ['diceRolls'], ['roadLaps'], ['events'], ['challenges'], ['pockets'], ['plinkos'], ['croonBest'], ['dropped'], ['won'], ['lost'], ['payout', st.dropped ? `${((st.won || 0) / st.dropped * 100).toFixed(1)}%` : '-'], ['gatePasses'], ['slotSpins'], ['slotWins'], ['sevens'], ['jpLottery'], ['jpWins'], ['fevers'], ['maxCombo'], ['items'], ['gems'], ['chests'], ['biggestWin'], ['maxWallet'], ['playTime', time(st.playTime)]];
+    const rows = [['coasters'], ['cranes'], ['craneGrabs'], ['catches'], ['wheels'], ['towers'], ['shakes'], ['diceRolls'], ['roadLaps'], ['events'], ['challenges'], ['pockets'], ['plinkos'], ['croonBest'], ['dropped'], ['won'], ['lost'], ['payout', st.dropped ? `${((st.won || 0) / st.dropped * 100).toFixed(1)}%` : '-'], ['gatePasses'], ['slotSpins'], ['slotWins'], ['sevens'], ['jpLottery'], ['jpWins'], ['fevers'], ['maxCombo'], ['items'], ['gems'], ['chests'], ['biggestWin'], ['maxWallet'], ['playTime', time(st.playTime)]];
     body.innerHTML = `<div class="stats">` + rows.map(([k, v]) => `<div class="srow"><span>${t('st_' + k)}</span><b>${v !== undefined ? v : fmt(st[k] || 0)}</b></div>`).join('') + `</div>`;
   }
 
@@ -393,7 +393,7 @@ export class UI {
       ]],
       ['g_features', [
         ['difficulty', 'select', ['easy', 'normal', 'hard'].map(v => [v, t('d_' + v)])],
-        ['f_slot', 'toggle'], ['slotFast', 'toggle'], ['f_jp', 'toggle'], ['f_croon', 'toggle'], ['f_tower3d', 'toggle'], ['towerCam', 'toggle'], ['f_catcher', 'toggle'], ['f_wheel', 'toggle'], ['f_hopper', 'toggle'], ['f_mechReels', 'toggle'], ['f_beacons', 'toggle'], ['jpSkip', 'toggle'], ['f_sugoroku', 'toggle'], ['f_events', 'toggle'], ['f_plinko', 'toggle'], ['f_bonusZone', 'toggle'], ['f_items', 'toggle'], ['f_gems', 'toggle'], ['f_fever', 'toggle'], ['f_walls', 'toggle'],
+        ['f_slot', 'toggle'], ['slotFast', 'toggle'], ['f_jp', 'toggle'], ['f_croon', 'toggle'], ['f_tower3d', 'toggle'], ['towerCam', 'toggle'], ['f_catcher', 'toggle'], ['f_wheel', 'toggle'], ['f_hopper', 'toggle'], ['f_mechReels', 'toggle'], ['f_beacons', 'toggle'], ['f_coaster', 'toggle'], ['f_crane', 'toggle'], ['f_plinko3d', 'toggle'], ['f_turntable', 'toggle'], ['f_flipper', 'toggle'], ['f_meterTube', 'toggle'], ['jpSkip', 'toggle'], ['f_sugoroku', 'toggle'], ['f_events', 'toggle'], ['f_plinko', 'toggle'], ['f_bonusZone', 'toggle'], ['f_items', 'toggle'], ['f_gems', 'toggle'], ['f_fever', 'toggle'], ['f_walls', 'toggle'],
         ['sideLoss', 'toggle'], ['f_combo', 'toggle'], ['f_missions', 'toggle'], ['f_login', 'toggle'], ['f_regen', 'toggle'],
         ['f_achievePopups', 'toggle'], ['f_floatText', 'toggle'], ['f_hints', 'toggle'],
       ]],
