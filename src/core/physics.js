@@ -10,6 +10,7 @@ export class PusherPhysics {
     this.world.timestep = 1 / this.hz;
     this.setIterations(opts.iterations || 2);
     this.objs = [];
+    this.outZone = 0;           // OUT zones at the ends of the front edge (difficulty)
     this.map = new Map();
     this.time = 0;
     this.phase = 0;
@@ -451,9 +452,11 @@ export class PusherPhysics {
       const t = o.body.translation();
       // medals that fell over the front edge are counted once they reach the payout tray
       if (t.y < L.lostY || Math.abs(t.x) > L.halfW + 6 || (t.y < L.trayY && t.z > L.frontZ + 0.1 && Math.abs(t.x) < L.halfW + 0.3)) {
-        const won = o.z > L.frontZ - 0.3 && Math.abs(o.x) < L.halfW + 0.3;
+        const front = o.z > L.frontZ - 0.3 && Math.abs(o.x) < L.halfW + 0.3;
+        const corner = front && this.outZone > 0 && Math.abs(o.x) > L.halfW - this.outZone;
+        const won = front && !corner;
         const pocket = !won && Math.abs(o.x - POCKET.x) < POCKET.hw + 0.4 && Math.abs(o.z - POCKET.z) < POCKET.hd + 0.4;
-        ev.push({ t: 'out', id: o.id, kind: o.kind, extra: o.extra, won, pocket, x: o.x });
+        ev.push({ t: 'out', id: o.id, kind: o.kind, extra: o.extra, won, pocket, corner, x: o.x });
         this.remove(o);
         continue;
       }

@@ -5,7 +5,7 @@ import fs from 'fs';
 import { L, configureLayout, cupXAt } from '../src/core/layout.js';
 const [mins, strat, rate, size, diff] = [process.argv[2] || 10, process.argv[3] || 'random', process.argv[4] || 4, process.argv[5] || 'wide', process.argv[6] || 'normal'];
 const { diffDef } = await import('../src/game/balance.js');
-configureLayout(size, diffDef(diff).gutter || 0);
+configureLayout(size);
 
 globalThis.document = globalThis.document || { documentElement: {} };
 const { PusherPhysics } = await import('../src/core/physics.js');
@@ -26,6 +26,7 @@ const physics = {
       case 'magnet': phys.magnet = !!c[1]; break;
       case 'blast': phys.blast(c[1], c[2], c[3], c[4]); break;
       case 'drain': phys.drain(c[1]); break;
+      case 'outZone': phys.outZone = c[1]; break;
       case 'cup': phys.cupOn = !!c[1]; break;
       case 'shake': phys.shake(c[1]); break;
       case 'craneStart': phys.craneStart(c[1], c[2]); break;

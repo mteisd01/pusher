@@ -21,21 +21,22 @@ export const B = {
   goldRatePerLv: 0.02,
   combo: { steps: [[30, 3], [40, 8], [55, 15], [75, 30]] },
   regen: { capBase: 20, capPerLv: 10, secBase: 40, secPerLv: 4 },
-  // slot / gate / item: odds multipliers. gutter: extra side-gutter length (the side walls end
-  // earlier; applied on reload). xp / jp / gem: rewards (XP gain, JP pool growth, gem rarity
-  // boost). walls: guard-wall duration. regen: coin regeneration cap. rocks: falling-rock interval [s].
+  // slot / gate / item: odds multipliers. outZone: width of the OUT zones at both ends of the
+  // front edge (medals falling there are lost; measured: a longer side gutter barely changes
+  // the payout, the front corners do). xp / jp / gem: rewards (XP gain, JP pool growth, gem rarity
+  // boost). walls: guard-wall duration. upgCost: shop price multiplier. regen: coin regeneration cap. rocks: falling-rock interval [s].
   difficulty: {
-    easy: { slot: 1.2, gate: 1.25, item: 1.4, gutter: 0, xp: 1, jp: 1, gem: 1, walls: 1.2, regen: 1.5, rocks: null,
+    easy: { slot: 1.2, gate: 1.25, item: 1.4, outZone: 0, upgCost: 0.8, xp: 1, jp: 1, gem: 1, walls: 1.2, regen: 1.5, rocks: null,
       bossHp: 0.6, bossTime: 90, bossAtk: 1.3, bossReward: 0.8, bossMix: 0, bossEnrage: false, bossRegen: false, bossBarrier: false, color: '#7CFFB2', badge: '' },
-    normal: { slot: 0.8, gate: 1, item: 1, gutter: 0, xp: 1, jp: 1, gem: 1, walls: 1, regen: 1, rocks: null,
+    normal: { slot: 0.8, gate: 1, item: 1, outZone: 0, upgCost: 1, xp: 1, jp: 1, gem: 1, walls: 1, regen: 1, rocks: null,
       bossHp: 1, bossTime: 75, bossAtk: 1, bossReward: 1, bossMix: 0, bossEnrage: false, bossRegen: false, bossBarrier: false, color: '#ffffff', badge: '' },
-    hard: { slot: 0.65, gate: 0.8, item: 0.7, gutter: 0.3, xp: 1.1, jp: 1.1, gem: 1.15, walls: 0.9, regen: 1, rocks: null,
+    hard: { slot: 0.65, gate: 0.8, item: 0.7, outZone: 0, upgCost: 1.15, xp: 1.1, jp: 1.1, gem: 1.15, walls: 0.9, regen: 1, rocks: null,
       bossHp: 1.2, bossTime: 72, bossAtk: 0.85, bossReward: 1.2, bossMix: 0, bossEnrage: false, bossRegen: false, bossBarrier: false, color: '#ff9e1b', badge: '' },
-    expert: { slot: 0.55, gate: 0.7, item: 0.6, gutter: 0.9, xp: 1.25, jp: 1.2, gem: 1.35, walls: 0.8, regen: 0.8, rocks: null,
+    expert: { slot: 0.55, gate: 0.7, item: 0.6, outZone: 0.8, upgCost: 1.3, xp: 1.25, jp: 1.2, gem: 1.35, walls: 0.8, regen: 0.8, rocks: null,
       bossHp: 1.4, bossTime: 70, bossAtk: 0.7, bossReward: 1.45, bossMix: 1, bossEnrage: true, bossRegen: false, bossBarrier: false, color: '#ffd34d', badge: '達' },
-    shura: { slot: 0.47, gate: 0.62, item: 0.5, gutter: 1.5, xp: 1.45, jp: 1.35, gem: 1.6, walls: 0.7, regen: 0.5, rocks: [180, 300],
+    shura: { slot: 0.47, gate: 0.62, item: 0.5, outZone: 1.3, upgCost: 1.5, xp: 1.45, jp: 1.35, gem: 1.6, walls: 0.7, regen: 0.5, rocks: [180, 300],
       bossHp: 1.6, bossTime: 66, bossAtk: 0.6, bossReward: 1.75, bossMix: 1, bossEnrage: true, bossRegen: true, bossBarrier: false, color: '#ff2d55', badge: '修' },
-    inferno: { slot: 0.4, gate: 0.55, item: 0.42, gutter: 2.1, xp: 1.7, jp: 1.5, gem: 2.0, walls: 0.6, regen: 0.5, rocks: [120, 220],
+    inferno: { slot: 0.4, gate: 0.55, item: 0.42, outZone: 1.8, upgCost: 1.75, xp: 1.7, jp: 1.5, gem: 2.0, walls: 0.6, regen: 0.5, rocks: [120, 220],
       bossHp: 1.8, bossTime: 62, bossAtk: 0.5, bossReward: 2.1, bossMix: 2, bossEnrage: true, bossRegen: true, bossBarrier: true, color: '#d500f9', badge: '獄' },
   },
   maxShowerPhysical: 120,

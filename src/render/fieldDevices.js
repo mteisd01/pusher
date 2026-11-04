@@ -97,6 +97,33 @@ export class FieldDevices {
     this.shown = 0; this.dump = 0; this.t = 0;
   }
 
+  // OUT zones at both ends of the front edge (upper difficulties): hazard-striped strips
+  setOutZone(w) {
+    if (w === this.outW) return;
+    this.outW = w;
+    if (this.outG) { this.group.remove(this.outG); this.outG = null; }
+    if (!w) return;
+    if (!this.outTex) {
+      const c = document.createElement('canvas'); c.width = 256; c.height = 64;
+      const g = c.getContext('2d');
+      g.fillStyle = '#ff1a1a'; g.fillRect(0, 0, 256, 64);
+      g.fillStyle = '#1a0000';
+      for (let x = -64; x < 256; x += 40) { g.beginPath(); g.moveTo(x, 64); g.lineTo(x + 20, 64); g.lineTo(x + 84, 0); g.lineTo(x + 64, 0); g.fill(); }
+      g.fillStyle = '#fff'; g.font = '900 40px Arial'; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.strokeStyle = '#000'; g.lineWidth = 8; g.strokeText('OUT', 128, 34); g.fillText('OUT', 128, 34);
+      this.outTex = new THREE.CanvasTexture(c); this.outTex.colorSpace = THREE.SRGBColorSpace;
+      this.outMat = new THREE.MeshBasicMaterial({ map: this.outTex, toneMapped: false, transparent: true, opacity: 0.85, depthWrite: false });
+    }
+    this.outG = new THREE.Group();
+    for (const sx of [-1, 1]) {
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(w, 0.7), this.outMat);
+      m.rotation.x = -Math.PI / 2;
+      m.position.set(sx * (this.W - w / 2), 0.012, L.frontZ - 0.35);
+      this.outG.add(m);
+    }
+    this.group.add(this.outG);
+  }
+
   // a caught medal starts its ride from the cup
   addCatch(x, y, z) { this.flying.push({ from: new THREE.Vector3(x, y, z), t: 0 }); }
   // the wheel starts: the tube empties into it
@@ -105,6 +132,7 @@ export class FieldDevices {
   update(dt, st, opt) {
     this.t += dt;
     const { ttAngle, flipL, flipR, kickZ, kickX, meter, tt, flip, meterOn } = st;
+    if (this.outMat) this.outMat.opacity = 0.65 + 0.25 * Math.sin(this.t * 4);
     for (const t of this.tts) t.g.rotation.y = -ttAngle * t.w;
     this.tts.forEach(t => { t.g.parent.visible = tt; });
     this.rimMat.color.setHSL(st.ttOn ? (this.t * 0.5) % 1 : 0.12, 1, st.ttOn ? 0.55 : 0.4);

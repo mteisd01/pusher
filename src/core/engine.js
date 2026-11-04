@@ -60,6 +60,7 @@ export function createEngine(post) {
       case 'shake': phys.shake(c[1]); break;
       case 'blast': phys.blast(c[1], c[2], c[3], c[4]); break;
       case 'drain': phys.drain(c[1]); break;
+      case 'outZone': phys.outZone = c[1]; break;
       case 'speed': phys.speed = c[1]; break;
       case 'stroke': phys.strokeBonus = c[1]; break;
       case 'hz': phys.setHz(c[1]); break;

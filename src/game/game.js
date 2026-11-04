@@ -290,6 +290,7 @@ export class Game {
     if (e.pocket && s.f_bonusZone) { this.features.onPocket(e); return; }
     if (!e.won) {
       this.prog.add('lost');
+      if (e.corner) { this.cornerOut = (this.cornerOut || 0) + 1; if (this.time - (this.cornerPopT || 0) > 1.2) { this.cornerPopT = this.time; this.ui.popup('OUT', e.x, 0.5, L.frontZ, '#ff5252', 1.1); } }
       if (e.kind >= KIND.BALL && e.kind !== KIND.ROCK) { this.toast('💨', t('lostItem')); this.audio.lost(); }
       return;
     }
@@ -530,11 +531,12 @@ export class Game {
   toast(icon, text) { this.ui.toast(icon, text); }
 
   // ---------- shop ----------
+  upgradeCost(u, lv) { return Math.round(upgradeCost(u, lv) * (this.diff.upgCost || 1) / 10) * 10; }
   buyUpgrade(id) {
     const u = UPGRADES.find(x => x.id === id);
     const lv = this.upg(id);
     if (!u || lv >= u.max) return false;
-    const cost = upgradeCost(u, lv);
+    const cost = this.upgradeCost(u, lv);
     if (this.save.coins < cost) { this.toast('🪙', t('notEnough')); return false; }
     this.save.coins -= cost;
     this.save.upgrades[id] = lv + 1;
@@ -560,6 +562,8 @@ export class Game {
     if (walls !== this.wallsSent) { this.physics.cmd('walls', walls); this.wallsSent = walls; }
     const speed = (this.fx.turbo > 0 ? B.turbo.speed : 1) * (this.fx.fever > 0 ? 1.15 : 1) * this.features.speedMult() * this.boss.speedMult();
     if (speed !== this.speedSent) { this.physics.cmd('speed', speed); this.speedSent = speed; }
+    const oz = this.diff.outZone || 0;
+    if (oz !== this.outSent) { this.physics.cmd('outZone', oz); this.outSent = oz; }
     const mag = this.fx.magnet > 0;
     if (mag !== this.magSent) { this.physics.cmd('magnet', mag); this.magSent = mag; }
     const flip = !!s.f_flipper && this.fx.flipper > 0;

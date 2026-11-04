@@ -292,7 +292,7 @@ export class UI {
   tab_shop(body) {
     const g = this.game;
     body.innerHTML = `<div class="wallet">${ICONS.coin}<b>${fmt(g.save.coins)}</b></div><div class="grid">` + UPGRADES.map(u => {
-      const lv = g.upg(u.id), maxed = lv >= u.max, cost = maxed ? 0 : upgradeCost(u, lv);
+      const lv = g.upg(u.id), maxed = lv >= u.max, cost = maxed ? 0 : g.upgradeCost(u, lv);
       const pips = Array.from({ length: u.max }, (_, i) => `<i class="${i < lv ? 'on' : ''}"></i>`).join('');
       return `<div class="card"><div class="ct">${t('up_' + u.id)}</div><div class="cd">${t('up_' + u.id + '_d')}</div><div class="pips">${pips}</div>
         <button class="btn ${maxed ? '' : 'primary'}" data-buy="${u.id}" ${maxed || g.save.coins < cost ? 'disabled' : ''}>${maxed ? t('max') : `${ICONS.coin}${fmt(cost)}`}</button></div>`;
@@ -478,13 +478,13 @@ export class UI {
     const x = v => `×${+v.toFixed(2)}`;
     const parts = [esc(t('dd_' + id))];
     const rw = [];
+    if (d.upgCost !== 1) parts.push(`${ja ? 'ショップの価格' : 'Shop prices'} ${x(d.upgCost)}`);
     if (d.xp !== 1) rw.push(`${ja ? '経験値' : 'XP'} ${x(d.xp)}`);
     if (d.jp !== 1) rw.push(`${ja ? 'JPの伸び' : 'JP growth'} ${x(d.jp)}`);
     if (d.gem !== 1) rw.push(`${ja ? '宝石のレア度' : 'Gem rarity'} ${x(d.gem)}`);
     if (rw.length) parts.push(`<b>${ja ? '見返り' : 'Rewards'}</b>: ${rw.join(' / ')}`);
     if (DIFF_REWARDS[id]) parts.push(`<b>${ja ? '限定' : 'Exclusive'}</b>: ${esc(t('diffExclusive', DIFF_REWARD_STAGE.theme, DIFF_REWARD_STAGE.skin))}`);
     parts.push(`<b>${ja ? 'ボス' : 'Boss'}</b>: HP ${x(d.bossHp)} / ${d.bossTime}s / ${ja ? '報酬' : 'reward'} ${x(d.bossReward)}${d.bossEnrage ? (ja ? ' / 怒り' : ' / enrage') : ''}${d.bossRegen ? (ja ? ' / 回復' : ' / regen') : ''}${d.bossBarrier ? (ja ? ' / バリア' : ' / barrier') : ''}`);
-    if (d.gutter) parts.push(esc(t('diffReload')));
     return parts.join('<br>');
   }
 

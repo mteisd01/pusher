@@ -41,9 +41,7 @@ async function boot() {
   const q = s.quality === 'auto' ? detectQuality() : s.quality;
   if (QUALITY_PRESETS[q] && (s.quality === 'auto' || !save._qualityApplied)) Object.assign(s, QUALITY_PRESETS[q]);
   save._qualityApplied = true;
-  // the difficulty changes the side-gutter length
-  const gutter = diffDef(s.difficulty).gutter || 0;
-  configureLayout(s.tableSize, gutter);
+  configureLayout(s.tableSize);
 
   // share-link import: #save=CODE
   let pendingImport = null;
@@ -72,7 +70,7 @@ async function boot() {
   const physics = new PhysicsClient();
   const boardKey = s.tableSize;
   let board = loadBoardFor(boardKey);
-  await physics.init({ layout: { size: s.tableSize, gutter }, worker: s.worker, hz: s.physHz, iterations: 2, stroke: (save.upgrades.stroke || 0) * 0.3, snapshot: board, prefill: s.prefill });
+  await physics.init({ layout: { size: s.tableSize }, worker: s.worker, hz: s.physHz, iterations: 2, stroke: (save.upgrades.stroke || 0) * 0.3, snapshot: board, prefill: s.prefill });
   setLoad(t('loading'), 0.9);
 
   const uiRoot = document.getElementById('ui');
@@ -167,7 +165,7 @@ async function boot() {
       case 'medalSkin': coins.setSkin(st.medalSkin); break;
       case 'f_boss': if (!st.f_boss) game.boss.abort(); break;
       case 'tableSize': persist(); unloading = true; location.reload(); return;
-      case 'difficulty': game.boss.abort(); if ((diffDef(st.difficulty).gutter || 0) !== gutter) { persist(); unloading = true; location.reload(); return; } break;
+      case 'difficulty': game.boss.abort(); break;
       case 'antialias': case 'worker': break;
     }
     persist();
@@ -332,6 +330,7 @@ async function boot() {
     if (!paused) {
       tower.update(dt);
       bossView.update(dt);
+      M_outZone(machines.field, game.diff.outZone || 0);
       const M = machines;
       M.reels.group.visible = !!(s.f_mechReels && s.f_slot);
       if (M.reels.group.visible) M.reels.update(dt, game.slot, { fever: game.fx.fever > 0 });
@@ -387,6 +386,7 @@ async function boot() {
   window.__game = game;
 }
 
+function M_outZone(f, w) { if (f && f.setOutZone) f.setOutZone(w); }
 function nextFrame() { return new Promise(r => requestAnimationFrame(() => r())); }
 
 boot().catch(e => {

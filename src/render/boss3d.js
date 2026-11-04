@@ -22,9 +22,11 @@ export class BossView {
   constructor(scene, audio, W) {
     this.audio = audio;
     this.root = new THREE.Group();
-    this.baseY = L.pusherH + 3.65;
-    this.root.position.set(0, this.baseY, L.backWallZ - 0.75);
-    this.root.scale.setScalar(Math.min(1, 0.55 + W / 25));
+    // stands on the back wall in front of the LCD: big enough to read, the outer reels and the
+    // HP bar at the top of the screen stay visible
+    this.baseY = L.pusherH + 4.65;
+    this.root.position.set(0, this.baseY, L.backWallZ - 0.6);
+    this.root.scale.setScalar(1.1 + W / 25);
     this.root.visible = false;
     scene.add(this.root);
     this.lift = new THREE.Group(); this.root.add(this.lift);
@@ -152,7 +154,7 @@ export class BossView {
       if (this.dieT > 2.2) { this.root.visible = false; this.mode = 'off'; }
     }
     const e = this.rise * this.rise * (3 - 2 * this.rise);
-    this.lift.position.y = (e - 1) * 4.2 + Math.sin(this.t * 1.6) * 0.08;
+    this.lift.position.y = (e - 1) * 4.6 + Math.sin(this.t * 1.6) * 0.08;
     // hit flash + recoil
     this.flash = Math.max(0, this.flash - dt * 3);
     this.recoil = Math.max(0, this.recoil - dt * 2.5);
