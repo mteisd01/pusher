@@ -2,10 +2,10 @@
 import * as THREE from 'three';
 import qrcode from 'qrcode-generator';
 import { t, setLang, getLang } from '../i18n.js';
-import { UPGRADES, upgradeCost, xpForLevel, DIFFICULTIES, diffDef } from '../game/balance.js';
+import { UPGRADES, upgradeCost, xpForLevel, DIFFICULTIES, diffDef, DIFF_REWARDS, DIFF_REWARD_STAGE, BOSS } from '../game/balance.js';
 import { ACHIEVEMENTS } from '../game/progression.js';
 import { THEMES } from '../render/themes.js';
-import { GEM_COLORS, TOKEN_STYLE } from '../render/coins.js';
+import { GEM_COLORS, TOKEN_STYLE, MEDAL_SKINS } from '../render/coins.js';
 import { exportCode, importCode, readBackup } from '../save.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -152,7 +152,8 @@ export class UI {
     const g = this.game, s = g.save;
     $('#hCoins', this.hud).textContent = fmt(s.coins);
     $('#hLv', this.hud).textContent = `Lv${s.level}`;
-    $('#hTitle', this.hud).textContent = t('t_' + g.prog.title());
+    const ts = g.settings.titleSel;
+    $('#hTitle', this.hud).textContent = ts && g.unlocks().titles.includes(ts) ? t('title_' + ts) : t('t_' + g.prog.title());
     const dd = g.diff, db = $('#hDiff', this.hud);
     if (db.dataset.k !== g.settings.difficulty) {
       db.dataset.k = g.settings.difficulty;
@@ -176,6 +177,9 @@ export class UI {
     const ev = g.features.event;
     if (ev) chips.push(`<span class="chip fever">${t('ev_' + ev.id)} ${Math.ceil(ev.t)}${ev.id === 'challenge' ? ` · ${ev.progress || 0}/${ev.target}` : ''}</span>`);
     if (g.features.pocketOpen) chips.push(`<span class="chip combo">POCKET</span>`);
+    const ba = g.boss.active;
+    if (ba) chips.push(`<span class="chip fever">BOSS ${Math.max(0, Math.ceil(ba.hp / ba.hpMax * 100))}% · ${Math.ceil(ba.t)}s</span>`);
+    else if (g.settings.f_boss) chips.push(`<span class="chip boss">BOSS ${Math.floor(g.boss.gaugeFrac() * 100)}%</span>`);
     const html = chips.join('');
     if (html !== this._chips) { $('#hFx', this.hud).innerHTML = html; this._chips = html; }
     const ms = s.missions;
@@ -350,19 +354,40 @@ export class UI {
   tab_stats(body) {
     const g = this.game, st = g.save.stats;
     const time = s => { s = Math.floor(s || 0); return `${Math.floor(s / 3600)}h ${Math.floor(s / 60) % 60}m`; };
-    const rows = [['rocks'], ['coasters'], ['cranes'], ['craneGrabs'], ['catches'], ['wheels'], ['towers'], ['shakes'], ['diceRolls'], ['roadLaps'], ['events'], ['challenges'], ['pockets'], ['plinkos'], ['croonBest'], ['dropped'], ['won'], ['lost'], ['payout', st.dropped ? `${((st.won || 0) / st.dropped * 100).toFixed(1)}%` : '-'], ['gatePasses'], ['slotSpins'], ['slotWins'], ['sevens'], ['jpLottery'], ['jpWins'], ['fevers'], ['maxCombo'], ['items'], ['gems'], ['chests'], ['biggestWin'], ['maxWallet'], ['playTime', time(st.playTime)]];
+    const bs = g.boss.st;
+    const rows = [['bossFights'], ['bossKills'], ['bossBestStage'], ...DIFFICULTIES.map(d => ['bossStage_' + d, `${bs.best[d] || 0} (${t('bossKillsShort')} ${bs.kills[d] || 0})`]), ['rocks'], ['coasters'], ['cranes'], ['craneGrabs'], ['catches'], ['wheels'], ['towers'], ['shakes'], ['diceRolls'], ['roadLaps'], ['events'], ['challenges'], ['pockets'], ['plinkos'], ['croonBest'], ['dropped'], ['won'], ['lost'], ['payout', st.dropped ? `${((st.won || 0) / st.dropped * 100).toFixed(1)}%` : '-'], ['gatePasses'], ['slotSpins'], ['slotWins'], ['sevens'], ['jpLottery'], ['jpWins'], ['fevers'], ['maxCombo'], ['items'], ['gems'], ['chests'], ['biggestWin'], ['maxWallet'], ['playTime', time(st.playTime)]];
     body.innerHTML = `<div class="stats">` + rows.map(([k, v]) => `<div class="srow"><span>${t('st_' + k)}</span><b>${v !== undefined ? v : fmt(st[k] || 0)}</b></div>`).join('') + `</div>`;
   }
 
   tab_themes(body) {
-    const g = this.game, lang = getLang();
-    body.innerHTML = '<div class="themes">' + THEMES.map(th => {
-      const unlocked = g.save.level >= th.unlock, cur = g.settings.theme === th.id;
+    const g = this.game, lang = getLang(), u = g.unlocks();
+    const dlabel = id => t('d_' + id);
+    const cardTheme = th => {
+      const unlocked = th.unlockDiff ? u.themes.includes(th.id) : g.save.level >= th.unlock, cur = g.settings.theme === th.id;
+      const lock = th.unlockDiff ? t('unlockBoss', dlabel(th.unlockDiff), DIFF_REWARD_STAGE.theme) : t('unlockAt', th.unlock);
       return `<div class="theme ${cur ? 'cur' : ''} ${unlocked ? '' : 'locked'}" style="--a:${th.accent};--b:${th.cabinet};--c:${th.bgTop}">
         <div class="tprev"><i></i><i></i><i></i></div><div class="tn">${th.name[lang] || th.name.ja}</div>
-        <button class="btn ${cur ? '' : 'primary'}" data-th="${th.id}" ${!unlocked || cur ? 'disabled' : ''}>${!unlocked ? t('unlockAt', th.unlock) : cur ? t('equipped') : t('equip')}</button></div>`;
-    }).join('') + '</div>';
+        <button class="btn ${cur ? '' : 'primary'}" data-th="${th.id}" ${!unlocked || cur ? 'disabled' : ''}>${!unlocked ? esc(lock) : cur ? t('equipped') : t('equip')}</button></div>`;
+    };
+    // medal looks and titles of the upper difficulties
+    const diffOf = (kind, id) => Object.keys(DIFF_REWARDS).find(d => DIFF_REWARDS[d][kind] === id);
+    const skins = Object.keys(MEDAL_SKINS).map(id => {
+      const d = diffOf('skin', id), unlocked = !d || u.skins.includes(id), cur = (g.settings.medalSkin || 'default') === id, sk = MEDAL_SKINS[id];
+      return `<div class="theme ${cur ? 'cur' : ''} ${unlocked ? '' : 'locked'}" style="--a:${sk.color};--b:${sk.color};--c:#111">
+        <div class="tprev medal"><b style="background:radial-gradient(circle at 40% 35%,#fff,${sk.color} 55%,${sk.emissive === '#000000' ? '#666' : sk.emissive})"></b></div><div class="tn">${esc(t('skin_' + id))}</div>
+        <button class="btn ${cur ? '' : 'primary'}" data-skin="${id}" ${!unlocked || cur ? 'disabled' : ''}>${!unlocked ? esc(t('unlockBoss', dlabel(d), DIFF_REWARD_STAGE.skin)) : cur ? t('equipped') : t('equip')}</button></div>`;
+    }).join('');
+    const titles = ['', ...Object.values(DIFF_REWARDS).map(r => r.title)].map(id => {
+      const d = id && diffOf('title', id), unlocked = !id || u.titles.includes(id), cur = (g.settings.titleSel || '') === id;
+      const name = id ? t('title_' + id) : t('titleLevel');
+      return `<button class="btn ${cur ? 'primary' : ''}" data-title="${id}" ${!unlocked ? 'disabled' : ''}>${esc(unlocked ? name : `🔒 ${t('unlockBossFirst', dlabel(d))}`)}</button>`;
+    }).join('');
+    body.innerHTML = `<div class="themes">${THEMES.map(cardTheme).join('')}</div>
+      <h3>${t('medalSkin')}</h3><div class="themes">${skins}</div>
+      <h3>${t('titleSel')}</h3><div class="row wrap">${titles}</div>`;
     body.querySelectorAll('[data-th]').forEach(b => b.onclick = () => { g.settings.theme = b.dataset.th; this.o.onSettings('theme'); this.renderTab(); });
+    body.querySelectorAll('[data-skin]').forEach(b => b.onclick = () => { g.settings.medalSkin = b.dataset.skin; this.o.onSettings('medalSkin'); this.renderTab(); });
+    body.querySelectorAll('[data-title]').forEach(b => b.onclick = () => { g.settings.titleSel = b.dataset.title; this.o.onSettings('titleSel'); this.renderTab(); });
   }
 
   tab_road(body) {
@@ -400,7 +425,7 @@ export class UI {
       ]],
       ['g_features', [
         ['difficulty', 'select', DIFFICULTIES.map(v => [v, t('d_' + v)])],
-        ['f_slot', 'toggle'], ['slotFast', 'toggle'], ['f_jp', 'toggle'], ['f_croon', 'toggle'], ['f_tower3d', 'toggle'], ['towerCam', 'toggle'], ['f_catcher', 'toggle'], ['f_wheel', 'toggle'], ['f_hopper', 'toggle'], ['f_mechReels', 'toggle'], ['f_beacons', 'toggle'], ['f_coaster', 'toggle'], ['f_crane', 'toggle'], ['f_plinko3d', 'toggle'], ['f_turntable', 'toggle'], ['f_flipper', 'toggle'], ['f_meterTube', 'toggle'], ['jpSkip', 'toggle'], ['f_sugoroku', 'toggle'], ['f_events', 'toggle'], ['f_plinko', 'toggle'], ['f_bonusZone', 'toggle'], ['f_items', 'toggle'], ['f_gems', 'toggle'], ['f_fever', 'toggle'], ['f_walls', 'toggle'],
+        ['f_slot', 'toggle'], ['slotFast', 'toggle'], ['f_jp', 'toggle'], ['f_croon', 'toggle'], ['f_tower3d', 'toggle'], ['towerCam', 'toggle'], ['f_catcher', 'toggle'], ['f_wheel', 'toggle'], ['f_hopper', 'toggle'], ['f_mechReels', 'toggle'], ['f_beacons', 'toggle'], ['f_boss', 'toggle'], ['f_coaster', 'toggle'], ['f_crane', 'toggle'], ['f_plinko3d', 'toggle'], ['f_turntable', 'toggle'], ['f_flipper', 'toggle'], ['f_meterTube', 'toggle'], ['jpSkip', 'toggle'], ['f_sugoroku', 'toggle'], ['f_events', 'toggle'], ['f_plinko', 'toggle'], ['f_bonusZone', 'toggle'], ['f_items', 'toggle'], ['f_gems', 'toggle'], ['f_fever', 'toggle'], ['f_walls', 'toggle'],
         ['sideLoss', 'toggle'], ['f_combo', 'toggle'], ['f_missions', 'toggle'], ['f_login', 'toggle'], ['f_regen', 'toggle'],
         ['f_achievePopups', 'toggle'], ['f_floatText', 'toggle'], ['f_hints', 'toggle'],
       ]],
@@ -457,7 +482,8 @@ export class UI {
     if (d.jp !== 1) rw.push(`${ja ? 'JPの伸び' : 'JP growth'} ${x(d.jp)}`);
     if (d.gem !== 1) rw.push(`${ja ? '宝石のレア度' : 'Gem rarity'} ${x(d.gem)}`);
     if (rw.length) parts.push(`<b>${ja ? '見返り' : 'Rewards'}</b>: ${rw.join(' / ')}`);
-    if (d.badge) parts.push(`<b>${ja ? '限定' : 'Exclusive'}</b>: ${esc(t('diffExclusive'))}`);
+    if (DIFF_REWARDS[id]) parts.push(`<b>${ja ? '限定' : 'Exclusive'}</b>: ${esc(t('diffExclusive', DIFF_REWARD_STAGE.theme, DIFF_REWARD_STAGE.skin))}`);
+    parts.push(`<b>${ja ? 'ボス' : 'Boss'}</b>: HP ${x(d.bossHp)} / ${d.bossTime}s / ${ja ? '報酬' : 'reward'} ${x(d.bossReward)}${d.bossEnrage ? (ja ? ' / 怒り' : ' / enrage') : ''}${d.bossRegen ? (ja ? ' / 回復' : ' / regen') : ''}${d.bossBarrier ? (ja ? ' / バリア' : ' / barrier') : ''}`);
     if (d.gutter) parts.push(esc(t('diffReload')));
     return parts.join('<br>');
   }

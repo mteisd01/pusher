@@ -25,6 +25,7 @@ const physics = {
       case 'pocket': phys.pocketOpen = !!c[1]; break;
       case 'magnet': phys.magnet = !!c[1]; break;
       case 'blast': phys.blast(c[1], c[2], c[3], c[4]); break;
+      case 'drain': phys.drain(c[1]); break;
       case 'cup': phys.cupOn = !!c[1]; break;
       case 'shake': phys.shake(c[1]); break;
       case 'craneStart': phys.craneStart(c[1], c[2]); break;
@@ -85,6 +86,8 @@ game.plinko3d = { setAim() {}, setAimWorld() {}, run: async () => { plk.drop((Ma
 physics.cmd('cup', true);
 const credit = game.credit.bind(game);
 game.credit = (n, src) => { tally[src] = (tally[src] || 0) + Math.round(n); credit(n, src); };
+const fights = [];
+for (const k of ['defeat', 'retreat']) { const f = game.boss[k].bind(game.boss); game.boss[k] = () => { const a = game.boss.active; fights.push(`${k === 'defeat' ? 'WIN' : 'lose'} s${a.stage} ${(a.time - a.t).toFixed(0)}s hp${Math.round(a.hpMax)} left${Math.round(Math.max(0, a.hp))}`); f(); }; }
 game.start();
 const dt = 1 / 60, frames = mins * 60 * 60;
 const ev = [];
@@ -114,7 +117,7 @@ for (let f = 0; f < frames; f++) {
   game.onPhysicsFrame({ ev, n: phys.objs.length, ms: 0 });
   if (f % 30 === 0) await new Promise(r => setImmediate(r)); // let async game code (mini games) progress
   if (f % (60 * 60) === 0) marks.push(`${Math.round(f / 3600)}m:${save.coins - start}`);
-  if (f === 8 * 3600) steady = { coins: save.coins, dropped: save.stats.dropped || 0, ach: tally.achievement || 0 };
+  if (f === 8 * 3600) steady = { coins: save.coins, dropped: save.stats.dropped || 0, ach: tally.achievement || 0, objs: phys.objs.length };
 }
 const st = save.stats;
 const dropped = st.dropped || 0;
@@ -122,12 +125,16 @@ const net = save.coins - start;
 console.log(`difficulty=${diff} strategy=${strat} size=${size} ${mins}min rate=${rate}/s  sim ${(performance.now() - t0) / 1000 | 0}s`);
 console.log(`dropped ${dropped}  net ${net}  return ${((dropped + net) / dropped * 100).toFixed(1)}%  level ${save.level}  objs ${phys.objs.length}`);
 console.log('income by source', JSON.stringify(tally));
-console.log('stats', JSON.stringify({ gate: st.gatePasses, spins: st.slotSpins, wins: st.slotWins, jp: st.jpLottery, jpWins: st.jpWins, fevers: st.fevers, items: st.items, lost: st.lost, dice: st.diceRolls, laps: st.roadLaps, events: st.events, pockets: st.pockets, plinko: st.plinkos, catches: st.catches, wheels: st.wheels, towers: st.towers, shakes: st.shakes, croonBest: st.croonBest, cranes: st.cranes, grabs: st.craneGrabs, flips: st.flips, rocks: st.rocks }));
+console.log('stats', JSON.stringify({ gate: st.gatePasses, spins: st.slotSpins, wins: st.slotWins, jp: st.jpLottery, jpWins: st.jpWins, fevers: st.fevers, items: st.items, lost: st.lost, dice: st.diceRolls, laps: st.roadLaps, events: st.events, pockets: st.pockets, plinko: st.plinkos, catches: st.catches, wheels: st.wheels, towers: st.towers, shakes: st.shakes, croonBest: st.croonBest, cranes: st.cranes, grabs: st.craneGrabs, flips: st.flips, rocks: st.rocks, bossFights: st.bossFights, bossKills: st.bossKills, bossBest: st.bossBestStage, bossDmg: st.bossDamage }));
 const ex = Object.entries(tally).filter(([k]) => k !== 'achievement').reduce((a, [, v]) => a + v, 0);
+console.log('boss', JSON.stringify(save.boss || {}), fights.join(' | '));
 console.log(`return excl. achievements: ${((ex) / dropped * 100).toFixed(1)}%  (board-only win: ${((tally.win || 0) / dropped * 100).toFixed(1)}%)`);
 console.log('timeline', marks.join(' '));
 console.log('ball routes', JSON.stringify(routes));
 if (steady) {
   const d = (save.stats.dropped || 0) - steady.dropped, n = save.coins - steady.coins - ((tally.achievement || 0) - steady.ach);
   console.log(`steady-state return from minute 8 (excl. achievements): ${((d + n) / d * 100).toFixed(1)}%`);
+  // medals released from (or stored into) the pile inflate (deflate) the measured return
+  const dp = phys.objs.length - steady.objs;
+  console.log(`pile ${steady.objs} -> ${phys.objs.length}; pile-corrected return: ${((d + n + dp) / d * 100).toFixed(1)}%`);
 }

@@ -1,7 +1,7 @@
 // v2 game elements: Lucky Road (sugoroku), random field events, center pocket, bonus zone,
 // 3-stage croon jackpot, plinko and the overlay queue that runs mini games one at a time.
 import { L, KIND, TOKEN } from '../core/layout.js';
-import { ROAD, ROAD_LAP_BONUS, ROAD_GATE_PER_DIE, roadMult, CROON, PLINKO, EVENTS, EVENT_INTERVAL, POCKET_CYCLE, BONUS_ZONE, B } from './balance.js';
+import { ROAD, ROAD_LAP_BONUS, ROAD_GATE_PER_DIE, roadMult, CROON, PLINKO, EVENTS, EVENT_INTERVAL, POCKET_CYCLE, BONUS_ZONE, B, BOSS } from './balance.js';
 import { t } from '../i18n.js';
 
 const rand = (a, b) => a + Math.random() * (b - a);
@@ -49,7 +49,7 @@ export class Features {
         if (this.event.id === 'challenge') this._challengeTick();
         if (this.event.id === 'quake' && this.event.quakes > 0 && (this.event.nextQuake -= dt) <= 0) { this.event.quakes--; this.event.nextQuake = 2; this.g.tableShake(0.8); }
         if (this.event.t <= 0) this._endEvent();
-      } else if (!this.busy) {
+      } else if (!this.busy && !g.boss.active && !g.boss.pending) {
         this.nextEvent -= dt;
         if (this.nextEvent <= 0) this.startEvent();
       }
@@ -58,7 +58,7 @@ export class Features {
     const rk = g.diff.rocks;
     if (rk) {
       if (this.rockT === null) this.rockT = rand(...rk);
-      if (!this.busy && (this.rockT -= dt) <= 0) { this.rockT = rand(...rk); this.dropRock(); }
+      if (!this.busy && !g.boss.active && (this.rockT -= dt) <= 0) { this.rockT = rand(...rk); this.dropRock(); }
     } else this.rockT = null;
     // pocket cycle
     if (s.f_bonusZone) {
@@ -163,6 +163,7 @@ export class Features {
         // the last square: big reward + JP ball
         const n = Math.round(30 * m); g.shower(Math.min(60, n)); if (n > 60) g.credit(n - 60, 'road');
         g.spawnItem(KIND.BALL); g.ui.banner(`GOAL BONUS +${n}`, 'rainbow'); g.audio.winBig();
+        g.boss.addGauge(Math.round(g.boss.need() * BOSS.gaugeRoad));
         break;
       }
     }
@@ -176,14 +177,15 @@ export class Features {
   }
 
   // a heavy worthless rock falls onto the field (it blocks medals until pushed off)
-  dropRock(x) {
+  // fromBoss: thrown by the boss onto the pusher shelf (it rides forward with the medals)
+  dropRock(x, fromBoss) {
     const g = this.g;
     if (x === undefined) x = rand(-(L.halfW - 2), L.halfW - 2);
-    const z = rand(L.pusherFrontMax + 1.0, L.frontZ - 2.6);
+    const z = fromBoss ? rand(L.backWallZ + 1.2, L.pusherFrontMin - 0.6) : rand(L.pusherFrontMax + 1.0, L.frontZ - 2.6);
     const a = Math.random() * Math.PI * 2;
     g.physics.cmd('spawn', KIND.ROCK, x, 7.5, z, { x: 0, y: Math.sin(a / 2), z: 0, w: Math.cos(a / 2) }, { x: 0, y: -3, z: 0 }, 0, 0, { x: rand(-2, 2), y: rand(-1, 1), z: rand(-2, 2) });
     g.objCount++;
-    g.ui.banner(t('rockFall'), '#c8b89a', 1.4);
+    if (!fromBoss) g.ui.banner(t('rockFall'), '#c8b89a', 1.4);
     setTimeout(() => { g.stage.addShake(0.35); g.audio.thump(x / L.halfW * 0.8, 0.7, 55); g.vibrate(40); }, 650);
   }
 

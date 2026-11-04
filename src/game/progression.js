@@ -39,6 +39,13 @@ tiers('cranes', [[1, 30], [25, 400]], '🏗');
 tiers('craneGrabs', [[30, 60], [500, 600]], '🦾');
 tiers('coasters', [[1, 20], [50, 400]], '🎢');
 tiers('rocks', [[1, 20], [20, 300]], '🪨');
+tiers('bossFights', [[1, 50], [10, 400], [50, 2000]], '👹');
+tiers('bossKills', [[1, 100], [10, 800], [50, 4000]], '⚔');
+tiers('bossBestStage', [[3, 200], [8, 1200], [15, 5000]], '🏯');
+tiers('bossPerfect', [[1, 150], [10, 1500]], '✨');
+tiers('bossKills_expert', [[1, 300], [10, 2000]], '達');
+tiers('bossKills_shura', [[1, 500], [10, 3000]], '修');
+tiers('bossKills_inferno', [[1, 800], [10, 5000]], '獄');
 export const ACHIEVEMENTS = A;
 
 const MISSION_POOL = [
@@ -57,6 +64,7 @@ const MISSION_POOL = [
   { id: 'wheels', base: [1, 2, 3], feat: 'f_wheel' },
   { id: 'craneGrabs', base: [5, 10, 20], feat: 'f_crane' },
   { id: 'events', base: [1, 2, 3], feat: 'f_events' },
+  { id: 'bossDamage', base: [150, 300, 600], feat: 'f_boss' },
 ];
 
 export const today = () => { const d = new Date(); return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`; };
@@ -103,6 +111,7 @@ export class Progression {
     if (a.stat === 'level') return this.s.level;
     if (a.stat === 'upgradesTotal') return this.upgradesTotal();
     if (a.stat === 'loginStreak') return this.s.login.streak;
+    if (a.stat.startsWith('bossKills_')) return ((this.s.boss && this.s.boss.kills) || {})[a.stat.slice(10)] || 0;
     return this.stat(a.stat);
   }
   checkAchievements() {

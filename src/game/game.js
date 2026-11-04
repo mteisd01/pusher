@@ -1,7 +1,8 @@
 // Central game orchestrator: input -> physics -> events -> rewards -> presentation
 import * as THREE from 'three';
 import { L, KIND, TOKEN } from '../core/layout.js';
-import { B, ITEM_TABLE, ROULETTE, UPGRADES, upgradeCost, WHEEL, WHEEL_NEED, COIN_TOWER, COASTER_ROUTES, CRANE_PLAY, ballExit, diffDef, ROCK_REWARD } from './balance.js';
+import { B, ITEM_TABLE, ROULETTE, UPGRADES, upgradeCost, WHEEL, WHEEL_NEED, COIN_TOWER, COASTER_ROUTES, CRANE_PLAY, ballExit, diffDef, ROCK_REWARD, BOSS, DIFF_REWARDS, DIFF_REWARD_STAGE } from './balance.js';
+import { BossSystem } from './boss.js';
 import { Progression } from './progression.js';
 import { Slot } from './slot.js';
 import { Features } from './features.js';
@@ -37,6 +38,7 @@ export class Game {
     this.strokeCoins = 0;
     this.devMode = null;          // 'crane' | 'plinko' while an on-table device takes the input
     this.features = new Features(this);
+    this.boss = new BossSystem(this);
   }
 
   get paused() { return this.pauseReasons.size > 0; }
@@ -54,7 +56,7 @@ export class Game {
   get diff() { return diffDef(this.settings.difficulty); }
   upg(id) { return this.prog.upg(id); }
   stockMax() { return B.stockBase + this.upg('stock'); }
-  gateHalf() { return (B.gate.half + B.gate.halfPerLv * this.upg('gate')) * Math.pow(L.halfW / 11, 1.2) * this.diff.gate * (this.fx.fever > 0 ? 1.6 : 1) * this.features.gateMult(); }
+  gateHalf() { return (B.gate.half + B.gate.halfPerLv * this.upg('gate')) * Math.pow(L.halfW / 11, 1.2) * this.diff.gate * (this.fx.fever > 0 ? 1.6 : 1) * this.features.gateMult() * this.boss.gateMult(); }
   get overlayBusy() { return this.features.busy || this.roulette.active || this.jpRunning; }
   slotLuck() { return (1 + 0.06 * this.upg('luck') + this.prog.gemLuck()) * this.diff.slot * (this.fx.fever > 0 ? 1.4 : 1); }
   itemRate() { return (B.itemRate + B.itemRatePerLv * this.upg('item')) * this.diff.item; }
@@ -128,6 +130,7 @@ export class Game {
     this.audio.drop(this.launcherX / L.halfW * 0.8);
     this.vibrate(8);
     this.prog.add('dropped', k);
+    this.boss.addGauge(k);
     this.prog.addXp(k);
     if (this.settings.f_jp) this.save.jpPool += B.jp.growPerDrop * k * (1 + Object.keys(this.save.gems).length * 0.01) * this.diff.jp;
     if (this.settings.f_items && Math.random() < this.itemRate() * k) this.spawnRandomItem();
@@ -191,6 +194,7 @@ export class Game {
     if (e.ph === 'close') { this.devMode = 'craneBusy'; this.audio.thump(0, 0.3, 140); }
     else if (e.ph === 'grab') {
       this.prog.add('craneGrabs', e.n);
+      this.boss.damage(e.n * BOSS.dmg.grab, this.aimX);
       this.ui.popup(e.n ? `GRAB ×${e.n}` : 'MISS…', this.aimX, 4, 0, e.n ? '#ff4fa0' : '#999', 1.3);
       e.n ? this.audio.gate() : this.audio.lose();
     } else if (e.ph === 'drop') { this.audio.payout(4, e.x / L.halfW * 0.8, false); this.stage.addShake(0.15); }
@@ -256,6 +260,7 @@ export class Game {
       else if (e.t === 'catch') this._onCatch(e);
       else if (e.t === 'crane') this._onCrane(e);
       else if (e.t === 'kick') { this.ui.popup('KICK!', e.x, 3, L.backWallZ + 1, '#ff7043', 1.2); this.audio.thump(0, 0.5, 90); this.kickWarn = 0; }
+      else if (e.t === 'drain') this._onDrain(e);
       else if (e.t === 'flip') this.audio.thump(0, 0.12, 220);
       else if (e.t === 'hit') this.audio.impact(e, L.halfW);
       else if (e.t === 'mv') this.motion = e.v;
@@ -267,6 +272,8 @@ export class Game {
     if (Math.abs(e.x - this.gateX) > this.gateHalf()) return;
     this.prog.add('gatePasses');
     this.features.onGatePass();
+    this.boss.addGauge(BOSS.gaugePerGate);
+    this.boss.onGate(e.x);
     this.gateFlash = 1;
     this.effects.burst(e.x, L.gateY, L.dropZ, this.theme().accent, 10, 3, 0.5, 0.5);
     if (this.save.stock < this.stockMax()) {
@@ -293,6 +300,8 @@ export class Game {
         const zone = this.features.inBonusZone(e.x);
         const v = B.value[e.kind] * mult * (zone && e.kind !== KIND.SILVER ? 2 : 1);
         this.credit(v, 'win');
+        const bd = BOSS.dmg;
+        this.boss.damage(e.kind === KIND.SILVER ? bd.silver : e.kind === KIND.GOLD ? bd.gold : e.kind === KIND.RAINBOW ? bd.rainbow : bd.big, e.x);
         if (zone && Math.random() < 0.18) {
           if (s.f_slot && this.save.stock < this.stockMax()) { this.save.stock++; this.ui.popup('+1 STOCK', e.x, 1.2, L.frontZ, '#7CFFB2', 1.3); }
           this.audio.gate();
@@ -309,17 +318,20 @@ export class Game {
       }
       case KIND.ROCK:
         this.prog.add('rocks');
+        if (this.boss.active) { this.boss.damage(BOSS.dmg.rock, e.x, true); }
         this.credit(ROCK_REWARD, 'rock');
         this.ui.popup(`ROCK +${ROCK_REWARD}`, e.x, 0.6, L.frontZ, '#c8b89a', 1.3);
         this.audio.thump(e.x / L.halfW * 0.8, 0.5, 80);
         this.effects.burst(...fxPos, '#9e8b6e', 24, 4, 0.7, 0.9);
         break;
       case KIND.BALL:
+        this.boss.damage(BOSS.dmg.ball, e.x);
         this.prog.add('items');
         if (s.f_jp) { this.jpQueue++; this.backboard.message(t('jpChance'), '#ffd34d', 2, 80); this.audio.itemGet(); }
         else this.credit(20, 'win');
         break;
       case KIND.GEM: {
+        this.boss.damage(BOSS.dmg.item, e.x);
         this.prog.add('items');
         const r = this.prog.collectGem(e.extra);
         const name = `${t('gemType')[r.type]}${this.settings.lang === 'en' ? ' ' : '・'}${t('gemRarity')[r.rarity]}`;
@@ -331,7 +343,9 @@ export class Game {
         break;
       }
       case KIND.CHEST: {
+        this.boss.damage(BOSS.dmg.item, e.x);
         this.prog.add('items'); this.prog.add('chests');
+        if (e.extra === 1) { this._bossChest(fxPos); break; }
         const r = Math.random();
         if (r < 0.5) { const n = Math.round(rand(15, 60)); this.credit(n, 'item'); this.toast('🧰', `${t('chest')} +${n}`); }
         else if (r < 0.75 && s.f_gems) { this.spawnItem(KIND.GEM); this.toast('🧰', `${t('chest')} → 💎`); }
@@ -341,6 +355,7 @@ export class Game {
         break;
       }
       case KIND.TOKEN:
+        this.boss.damage(BOSS.dmg.item, e.x);
         this.prog.add('items');
         this.activateToken(e.extra);
         this.effects.burst(...fxPos, '#ffffff', 24, 5, 0.7, 1);
@@ -367,6 +382,7 @@ export class Game {
     let bonus = 0;
     for (const [k, b] of B.combo.steps) if (n >= k) bonus = b;
     this.credit(bonus, 'combo');
+    this.boss.damage(Math.round(n * BOSS.dmg.combo), 0);
     this.ui.banner(`PUSH COMBO ${n}! +${bonus}`, n >= 40 ? 'rainbow' : '#ffd34d');
     this.audio.combo(n);
     this.stage.addShake(0.12);
@@ -428,6 +444,7 @@ export class Game {
     if (!o) { this.audio.lose(); return; }
     this.prog.add('slotWins');
     this.prog.addXp(5);
+    this.boss.damage(BOSS.dmg.slot * (o.kind === 'fever' || o.kind === 'ball' || o.kind === 'rainbow' ? 2 : 1), 0);
     const s = this.settings;
     switch (o.kind) {
       case 'fever':
@@ -539,9 +556,9 @@ export class Game {
     const s = this.settings;
     // fx timers
     for (const k in this.fx) if (this.fx[k] > 0) { this.fx[k] = Math.max(0, this.fx[k] - dt); if (k === 'fever' && this.fx.fever === 0) this.audio.fever = false; }
-    const walls = this.fx.walls > 0 || !s.sideLoss;
+    const walls = (this.fx.walls > 0 || !s.sideLoss) && !this.boss.wallsBlocked();
     if (walls !== this.wallsSent) { this.physics.cmd('walls', walls); this.wallsSent = walls; }
-    const speed = (this.fx.turbo > 0 ? B.turbo.speed : 1) * (this.fx.fever > 0 ? 1.15 : 1) * this.features.speedMult();
+    const speed = (this.fx.turbo > 0 ? B.turbo.speed : 1) * (this.fx.fever > 0 ? 1.15 : 1) * this.features.speedMult() * this.boss.speedMult();
     if (speed !== this.speedSent) { this.physics.cmd('speed', speed); this.speedSent = speed; }
     const mag = this.fx.magnet > 0;
     if (mag !== this.magSent) { this.physics.cmd('magnet', mag); this.magSent = mag; }
@@ -584,12 +601,43 @@ export class Game {
     if (s.f_slot) this.slot.update(dt);
     if (this.jpQueue > 0 && !this.overlayBusy && !this.features.queue.length) this._runJackpot();
     this.features.update(dt);
+    this.boss.update(dt);
     this.audio.pileMotion && this.audio.pileMotion(this.motion || 0, dt);
     this.prog.add('playTime', dt);
     this._missionTimer = (this._missionTimer || 0) + dt;
     if (this._missionTimer > 30) { this._missionTimer = 0; this.prog.ensureMissions(); }
     this.prog.checkAchievements();
     this.payoutFlash = Math.max(0, this.payoutFlash - dt * 3);
+  }
+
+  // ---------- boss ----------
+  _onDrain(e) {
+    for (const [x, z] of e.pts) this.effects.burst(x, 0.4, z, '#b388ff', 8, 3, 0.5, 0.6);
+    if (e.pts.length) { this.ui.popup(`-${e.pts.length}`, 0, 1.5, 2.5, '#b388ff', 1.4); this.audio.sweep && this.audio.sweep(600, 150, 0.6, 0.07, 0, 'sawtooth'); }
+  }
+  // the chest a boss drops: a gem (boosted rarity), coins and an item
+  _bossChest(fxPos) {
+    const n = Math.round(rand(30, 80) * this.diff.bossReward);
+    this.credit(n, 'boss');
+    if (this.settings.f_gems) this.spawnItem(KIND.GEM, this.prog.rollGem(Math.random, this.diff.gem * 1.5));
+    if (this.settings.f_items) this.spawnRandomItem();
+    this.toast('👑', `${t('bossChest')} +${n}`);
+    this.effects.burst(...fxPos, '#ffd34d', 50, 6, 0.9, 1.2);
+    this.audio.itemGet();
+  }
+  // cosmetic unlocks of the upper difficulties
+  onBossDefeated(diff, stage) {
+    const r = DIFF_REWARDS[diff];
+    if (!r) return;
+    const u = this.unlocks();
+    const give = (list, id, kind) => { if (stage >= DIFF_REWARD_STAGE[kind] && !u[list].includes(id)) { u[list].push(id); this.toast('🎁', t('unlock_' + kind, t(kind + '_' + id))); this.audio.levelUp(); } };
+    give('themes', r.theme, 'theme'); give('skins', r.skin, 'skin'); give('titles', r.title, 'title');
+  }
+  unlocks() {
+    const s = this.save;
+    if (!s.unlocks || typeof s.unlocks !== 'object') s.unlocks = {};
+    for (const k of ['themes', 'skins', 'titles']) if (!Array.isArray(s.unlocks[k])) s.unlocks[k] = [];
+    return s.unlocks;
   }
 
   // ---------- table gimmicks ----------
@@ -658,6 +706,7 @@ export class Game {
 
   beaconMode() {
     if (this.tower && this.tower.active) return 'jp';
+    if (this.boss.active) return this.boss.active.weak ? 'win' : 'fever';
     if (this.devMode) return 'win';
     if (this.fx.fever > 0) return 'fever';
     if (this.features.event) return 'event';
@@ -666,7 +715,7 @@ export class Game {
   }
 
   lightMode() {
-    if (this.fx.fever > 0) return 'fever';
+    if (this.fx.fever > 0 || this.boss.active) return 'fever';
     if (this.slot.flash > 0 || this.overlayBusy) return 'win';
     if (this.features.event) return 'fever';
     if (this.slot.spinning) return 'spin';

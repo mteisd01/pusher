@@ -102,7 +102,7 @@ export class Backboard {
     this.time += dt;
     this.acc += dt;
     if (this.msg) { this.msg.t -= dt; if (this.msg.t <= 0) this.msg = null; }
-    const active = st.slot.spinning || st.slot.flash > 0 || this.msg || st.fever;
+    const active = st.slot.spinning || st.slot.flash > 0 || this.msg || st.fever || st.boss;
     const interval = active ? 1 / 30 : 1 / 6;
     if (this.acc < interval && !this.dirty) return;
     this.acc = 0; this.dirty = false;
@@ -121,8 +121,22 @@ export class Backboard {
     g.save(); g.translate(W / 2, H * 0.55); g.globalAlpha = 0.07;
     for (let i = 0; i < 24; i++) { g.rotate(Math.PI / 12); g.fillStyle = i % 2 ? th.accent : '#fff'; g.beginPath(); g.moveTo(0, 0); g.lineTo(900, -60); g.lineTo(900, 60); g.fill(); }
     g.restore(); g.globalAlpha = 1;
-    // Jackpot header
-    if (st.jpOn) {
+    // boss battle header (replaces the jackpot header): name, HP bar, time
+    if (st.boss) {
+      const b = st.boss, k = Math.max(0, b.hp / b.hpMax);
+      g.fillStyle = 'rgba(20,0,0,.75)'; roundRect(g, 212, 10, 600, 100, 18); g.fill();
+      g.strokeStyle = b.weak ? '#00ff88' : b.barrier ? '#b388ff' : '#ff3030'; g.lineWidth = 4; g.stroke();
+      g.font = '900 26px "Arial Black", Arial'; g.textAlign = 'left'; g.textBaseline = 'middle';
+      g.fillStyle = '#ffb4a8'; g.fillText(`STAGE ${b.stage}  ${(b.type || '').toUpperCase()}`, 232, 34);
+      g.textAlign = 'right'; g.fillStyle = b.t < 10 && Math.floor(t * 4) % 2 ? '#ff5252' : '#fff';
+      g.fillText(`${Math.ceil(Math.max(0, b.t))}s`, 792, 34);
+      g.fillStyle = '#300'; roundRect(g, 232, 56, 560, 38, 10); g.fill();
+      const hg = g.createLinearGradient(232, 0, 792, 0);
+      if (b.weak) { hg.addColorStop(0, '#00c853'); hg.addColorStop(1, '#b9f6ca'); } else { hg.addColorStop(0, '#d50000'); hg.addColorStop(1, '#ff9e80'); }
+      g.fillStyle = hg; roundRect(g, 232, 56, Math.max(12, 560 * k), 38, 10); g.fill();
+      g.font = '900 24px "Arial Black", Arial'; g.textAlign = 'center'; g.fillStyle = '#fff';
+      g.fillText(b.weak ? 'WEAK POINT!' : b.barrier ? 'BARRIER' : `HP ${Math.max(0, Math.ceil(b.hp))} / ${b.hpMax}`, W / 2, 76);
+    } else if (st.jpOn) {
       g.fillStyle = 'rgba(0,0,0,.55)'; roundRect(g, 262, 14, 500, 92, 18); g.fill();
       g.strokeStyle = th.accent; g.lineWidth = 3; g.stroke();
       g.font = '900 30px "Arial Black", Arial'; g.textAlign = 'center'; g.textBaseline = 'middle';
@@ -204,7 +218,10 @@ export class Backboard {
     if (fx.turbo > 0) right.push(['TURBO', '#ff9f43'], [`${Math.ceil(fx.turbo)}s`, '#fff', 30]);
     if (fx.double > 0) right.push(['×2', '#c38bff', 30], [`${Math.ceil(fx.double)}s`, '#fff', 30]);
     if (fx.magnet > 0) right.push(['MAGNET', '#ff6b6b', 20], [`${Math.ceil(fx.magnet)}s`, '#fff', 30]);
-    if (st.wheelMeter >= 0 && right.length < 4) right.push(['WHEEL', '#7CFFB2', 22], [`${Math.min(st.wheelMeter, st.wheelNeed)}/${st.wheelNeed}`, '#7CFFB2', 30]);
+    if (st.bossGauge >= 0 && !st.boss && right.length < 4) right.push(['BOSS', '#ff6e6e', 22], [`${Math.floor(st.bossGauge * 100)}%`, st.bossGauge > 0.85 && Math.floor(t * 3) % 2 ? '#ff5252' : '#fff', 30]);
+    if (st.jam > 0) left.unshift(['JAM', '#ff6e40'], [`${Math.ceil(st.jam)}s`, '#fff', 30]);
+    if (st.freeze > 0) left.unshift(['FREEZE', '#80d8ff', 20], [`${Math.ceil(st.freeze)}s`, '#fff', 30]);
+        if (st.wheelMeter >= 0 && right.length < 4) right.push(['WHEEL', '#7CFFB2', 22], [`${Math.min(st.wheelMeter, st.wheelNeed)}/${st.wheelNeed}`, '#7CFFB2', 30]);
     if (st.event) {
       const ev = st.event;
       const lines = [['EVENT', '#ff8a65'], [`${Math.ceil(ev.t)}s`, '#fff', 30]];

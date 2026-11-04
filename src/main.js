@@ -6,6 +6,7 @@ import { BallCoaster } from './render/coaster.js';
 import { CraneRig } from './render/crane.js';
 import { FieldDevices } from './render/fieldDevices.js';
 import { Plinko3D } from './render/plinko3d.js';
+import { BossView } from './render/boss3d.js';
 import { WHEEL, WHEEL_NEED, PLINKO, diffDef } from './game/balance.js';
 import { CUP, PACK_HEAD } from './core/layout.js';
 import { TRAY, POLE_X } from './render/cabinet.js';
@@ -112,6 +113,9 @@ async function boot() {
     crane: new CraneRig(stage.scene, W0),
   };
   machines.field = new FieldDevices(stage.scene, W0, machines.wheel.group.position);
+  const bossView = new BossView(stage.scene, audio, W0);
+  game.bossView = bossView;
+  coins.setSkin(s.medalSkin);
   game.plinko3d = new Plinko3D(stage.scene, stage, audio, SCREEN, PLINKO);
   game.machines = machines;
   mini.isPaused = () => game.paused;
@@ -160,8 +164,10 @@ async function boot() {
       case 'theme': { const th = themeById(st.theme); stage.setTheme(th); audio.setStyle(th.bgm); break; }
       case 'leftHand': case 'highContrast': case 'reduceMotion': case 'uiScale': case 'dropButton': case 'showFps': ui.applyLayout(); break;
       case 'f_missions': game.prog.ensureMissions(); break;
+      case 'medalSkin': coins.setSkin(st.medalSkin); break;
+      case 'f_boss': if (!st.f_boss) game.boss.abort(); break;
       case 'tableSize': persist(); unloading = true; location.reload(); return;
-      case 'difficulty': if ((diffDef(st.difficulty).gutter || 0) !== gutter) { persist(); unloading = true; location.reload(); return; } break;
+      case 'difficulty': game.boss.abort(); if ((diffDef(st.difficulty).gutter || 0) !== gutter) { persist(); unloading = true; location.reload(); return; } break;
       case 'antialias': case 'worker': break;
     }
     persist();
@@ -319,11 +325,13 @@ async function boot() {
       slot: game.slot, slotOn: s.f_slot, jpOn: s.f_jp, jpPool: save.jpPool, stock: save.stock, stockMax: game.stockMax(),
       fever: game.fx.fever > 0, effects: game.fx, combo: game.combo, theme: game.theme(), event: game.features.event,
       mech: !!(s.f_mechReels && s.f_slot), wheelMeter: s.f_wheel ? (save.wheelMeter || 0) : -1, wheelNeed: WHEEL_NEED,
+      boss: game.boss.active, bossGauge: s.f_boss ? game.boss.gaugeFrac() : -1, bossStage: game.boss.stage(), jam: game.boss.jam, freeze: game.boss.freeze,
     });
     if (!paused) effects.update(dt);
     coins.updateTray(paused ? 0 : dt);
     if (!paused) {
       tower.update(dt);
+      bossView.update(dt);
       const M = machines;
       M.reels.group.visible = !!(s.f_mechReels && s.f_slot);
       if (M.reels.group.visible) M.reels.update(dt, game.slot, { fever: game.fx.fever > 0 });

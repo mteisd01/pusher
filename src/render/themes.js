@@ -48,5 +48,30 @@ export const THEMES = [
     led: ['#ffd700', '#ffffff', '#ff9e1b'], pusher: '#f2d27a', light: '#fff4d8', accent: '#ffd700',
     bgm: { bpm: 104, root: 58, mode: 'major', lead: 'brass' },
   },
+  // exclusive themes of the upper difficulties (beat the stage-3 boss on that difficulty)
+  {
+    id: 'obsidian', unlock: 0, unlockDiff: 'expert', name: { ja: '黒曜の金閣', en: 'Obsidian Gold' },
+    bgTop: '#14110a', bgBottom: '#000000', fog: '#080603',
+    floorA: '#26221a', floorB: '#0c0a06', floorLine: '#ffd34d', logo: '達人',
+    cabinet: '#0d0c0a', cabinetKind: 'plate', trim: '#ffd34d', glass: '#fff3c4',
+    led: ['#ffd34d', '#ffffff', '#ffb300'], pusher: '#3a3630', light: '#fff1d0', accent: '#ffd34d',
+    bgm: { bpm: 112, root: 50, mode: 'dorian', lead: 'brass' },
+  },
+  {
+    id: 'crimson', unlock: 0, unlockDiff: 'shura', name: { ja: '深紅の刃', en: 'Crimson Blade' },
+    bgTop: '#2a0006', bgBottom: '#050000', fog: '#140003',
+    floorA: '#3c0a10', floorB: '#140205', floorLine: '#ff2d55', logo: '修羅',
+    cabinet: '#1f0207', cabinetKind: 'grid', trim: '#ff2d55', glass: '#ffc4cc',
+    led: ['#ff2d55', '#ffffff', '#ff6e40'], pusher: '#b0a8aa', light: '#ffe2e2', accent: '#ff2d55',
+    bgm: { bpm: 128, root: 52, mode: 'minor', lead: 'saw' },
+  },
+  {
+    id: 'inferno', unlock: 0, unlockDiff: 'inferno', name: { ja: '業火と黒鉄', en: 'Hellfire Iron' },
+    bgTop: '#2b0a00', bgBottom: '#000000', fog: '#170500',
+    floorA: '#2a1608', floorB: '#0a0402', floorLine: '#ff6d00', logo: '地獄',
+    cabinet: '#120806', cabinetKind: 'stars', trim: '#ff6d00', glass: '#ffd3b0',
+    led: ['#ff3d00', '#ffab00', '#d500f9'], pusher: '#4a403a', light: '#ffe0c8', accent: '#ff6d00',
+    bgm: { bpm: 136, root: 49, mode: 'minor', lead: 'saw' },
+  },
 ];
 export const themeById = id => THEMES.find(t => t.id === id) || THEMES[0];

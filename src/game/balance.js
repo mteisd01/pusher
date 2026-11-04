@@ -25,12 +25,18 @@ export const B = {
   // earlier; applied on reload). xp / jp / gem: rewards (XP gain, JP pool growth, gem rarity
   // boost). walls: guard-wall duration. regen: coin regeneration cap. rocks: falling-rock interval [s].
   difficulty: {
-    easy: { slot: 1.2, gate: 1.25, item: 1.4, gutter: 0, xp: 1, jp: 1, gem: 1, walls: 1.2, regen: 1.5, rocks: null, color: '#7CFFB2', badge: '' },
-    normal: { slot: 0.8, gate: 1, item: 1, gutter: 0, xp: 1, jp: 1, gem: 1, walls: 1, regen: 1, rocks: null, color: '#ffffff', badge: '' },
-    hard: { slot: 0.65, gate: 0.8, item: 0.7, gutter: 0, xp: 1.1, jp: 1.1, gem: 1.15, walls: 0.9, regen: 1, rocks: null, color: '#ff9e1b', badge: '' },
-    expert: { slot: 0.55, gate: 0.7, item: 0.6, gutter: 0.6, xp: 1.25, jp: 1.2, gem: 1.35, walls: 0.8, regen: 0.8, rocks: null, color: '#ffd34d', badge: '達' },
-    shura: { slot: 0.47, gate: 0.62, item: 0.5, gutter: 1.1, xp: 1.45, jp: 1.35, gem: 1.6, walls: 0.7, regen: 0.5, rocks: [180, 300], color: '#ff2d55', badge: '修' },
-    inferno: { slot: 0.4, gate: 0.55, item: 0.42, gutter: 1.6, xp: 1.7, jp: 1.5, gem: 2.0, walls: 0.6, regen: 0.5, rocks: [120, 220], color: '#d500f9', badge: '獄' },
+    easy: { slot: 1.2, gate: 1.25, item: 1.4, gutter: 0, xp: 1, jp: 1, gem: 1, walls: 1.2, regen: 1.5, rocks: null,
+      bossHp: 0.6, bossTime: 90, bossAtk: 1.3, bossReward: 0.8, bossMix: 0, bossEnrage: false, bossRegen: false, bossBarrier: false, color: '#7CFFB2', badge: '' },
+    normal: { slot: 0.8, gate: 1, item: 1, gutter: 0, xp: 1, jp: 1, gem: 1, walls: 1, regen: 1, rocks: null,
+      bossHp: 1, bossTime: 75, bossAtk: 1, bossReward: 1, bossMix: 0, bossEnrage: false, bossRegen: false, bossBarrier: false, color: '#ffffff', badge: '' },
+    hard: { slot: 0.65, gate: 0.8, item: 0.7, gutter: 0.3, xp: 1.1, jp: 1.1, gem: 1.15, walls: 0.9, regen: 1, rocks: null,
+      bossHp: 1.2, bossTime: 72, bossAtk: 0.85, bossReward: 1.2, bossMix: 0, bossEnrage: false, bossRegen: false, bossBarrier: false, color: '#ff9e1b', badge: '' },
+    expert: { slot: 0.55, gate: 0.7, item: 0.6, gutter: 0.9, xp: 1.25, jp: 1.2, gem: 1.35, walls: 0.8, regen: 0.8, rocks: null,
+      bossHp: 1.4, bossTime: 70, bossAtk: 0.7, bossReward: 1.45, bossMix: 1, bossEnrage: true, bossRegen: false, bossBarrier: false, color: '#ffd34d', badge: '達' },
+    shura: { slot: 0.47, gate: 0.62, item: 0.5, gutter: 1.5, xp: 1.45, jp: 1.35, gem: 1.6, walls: 0.7, regen: 0.5, rocks: [180, 300],
+      bossHp: 1.6, bossTime: 66, bossAtk: 0.6, bossReward: 1.75, bossMix: 1, bossEnrage: true, bossRegen: true, bossBarrier: false, color: '#ff2d55', badge: '修' },
+    inferno: { slot: 0.4, gate: 0.55, item: 0.42, gutter: 2.1, xp: 1.7, jp: 1.5, gem: 2.0, walls: 0.6, regen: 0.5, rocks: [120, 220],
+      bossHp: 1.8, bossTime: 62, bossAtk: 0.5, bossReward: 2.1, bossMix: 2, bossEnrage: true, bossRegen: true, bossBarrier: true, color: '#d500f9', badge: '獄' },
   },
   maxShowerPhysical: 120,
 };
@@ -39,6 +45,30 @@ export const DIFFICULTIES = ['easy', 'normal', 'hard', 'expert', 'shura', 'infer
 export const diffDef = id => B.difficulty[id] || B.difficulty.normal;
 // value of a rock block pushed off the front edge
 export const ROCK_REWARD = 3;
+
+// Boss battles (see game/boss.js). The stage gauge fills with drops (1) and gate passes;
+// HP = hp * hpGrow^(stage-1) * difficulty.bossHp; reward = (reward + rewardPerStage*(stage-1)) * bossReward
+export const BOSS = {
+  gaugeNeed: 1800, gaugePerGate: 3, gaugeRoad: 0.3, introMs: 3000,
+  hp: 260, hpGrow: 1.18, reward: 100, rewardPerStage: 20, ballChance: 0.25,
+  firstAttack: 8, attackEvery: 14, weakEvery: 16, weakDur: 4, critMult: 5,
+  barrierEvery: 18, barrierDur: 5, regenAfter: 5, regenRate: 0.012,
+  jamDur: 7, freezeDur: 6, freezeSpeed: 0.5, drain: [2, 6],
+  retryGauge: 0.5, consolation: 0.3,
+  // damage per action
+  dmg: { silver: 1, gold: 4, rainbow: 15, big: 20, gate: 4, slot: 25, ball: 60, item: 12, grab: 2, rock: 40, combo: 0.5 },
+};
+export const BOSS_TYPES = [
+  { id: 'golem', atk: 'rock' }, { id: 'dragon', atk: 'jam' }, { id: 'kraken', atk: 'drain' }, { id: 'phantom', atk: 'freeze' },
+];
+// cosmetic rewards of the upper difficulties: theme (beat the stage-3 boss), medal look (stage 5),
+// title (first boss kill)
+export const DIFF_REWARDS = {
+  expert: { theme: 'obsidian', skin: 'platinum', title: 'expertKing' },
+  shura: { theme: 'crimson', skin: 'crimson', title: 'shuraKing' },
+  inferno: { theme: 'inferno', skin: 'hellfire', title: 'infernoKing' },
+};
+export const DIFF_REWARD_STAGE = { theme: 3, skin: 5, title: 1 };
 
 // Slot symbols
 export const SYM = { SEVEN: 0, BAR: 1, BELL: 2, CHERRY: 3, STAR: 4, JP: 5, GOLD: 6, GEM: 7 };

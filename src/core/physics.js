@@ -402,6 +402,7 @@ export class PusherPhysics {
   // Advance simulation by dt; returns events
   step(dt, ev) {
     if (this.paused) return 0;
+    if (this.pendingEv && this.pendingEv.length) { ev.push(...this.pendingEv); this.pendingEv.length = 0; }
     this.acc += Math.min(dt, 0.1);
     const h = 1 / this.hz;
     let n = 0;
@@ -502,6 +503,20 @@ export class PusherPhysics {
   }
 
   // radial blast (BOMB item): pushes nearby objects forward/outward
+  // boss attack: n medals resting on the field are sucked away (removed); the positions go to
+  // the game for the effect
+  drain(n) {
+    const cand = this.objs.filter(o => !o.dead && !o.grab && o.kind <= KIND.GOLD && o.y < 1.2 && o.z > L.pusherFrontMax + 0.5 && o.z < L.frontZ - 0.4 && Math.abs(o.x) < L.halfW - 0.6);
+    const pts = [];
+    for (let i = 0; i < n && cand.length; i++) {
+      const o = cand.splice(Math.floor(Math.random() * cand.length), 1)[0];
+      pts.push([o.x, o.z]);
+      this.remove(o);
+    }
+    this.objs = this.objs.filter(o => !o.dead);
+    (this.pendingEv = this.pendingEv || []).push({ t: 'drain', pts });
+  }
+
   blast(x, z, r, k) {
     for (const o of this.objs) {
       const dx = o.x - x, dz = o.z - z, d = Math.hypot(dx, dz);

@@ -35,6 +35,9 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .hud-fx { position: absolute; top: max(8px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); display: flex; gap: .35em; flex-wrap: wrap; justify-content: center; max-width: 52vw; pointer-events: none; }
 .chip { padding: .25em .6em; border-radius: 99px; background: var(--panel); border: 1px solid var(--line); font-weight: 800; font-size: .85em; white-space: nowrap; }
 .chip.fever { background: linear-gradient(90deg, #ff2d55, #ff9e1b, #ffd34d, #26c967, #2979ff, #d500f9); background-size: 300% 100%; animation: rb 2s linear infinite; color: #fff; text-shadow: 0 1px 2px #000; }
+.chip.boss { color: #ff6e6e; }
+.tprev.medal { align-items: center; }
+.tprev.medal b { width: 2.6em; height: 2.6em; border-radius: 50%; box-shadow: 0 0 10px var(--a); }
 .chip.road { color: #ffd34d; }
 .roadgrid { display: grid; grid-template-columns: repeat(8, 1fr); gap: .35em; }
 .roadgrid .sq { position: relative; background: var(--c); border-radius: 10px; padding: .9em .2em .5em; text-align: center; font-weight: 900; font-size: .8em; border: 2px solid rgba(0,0,0,.4); }

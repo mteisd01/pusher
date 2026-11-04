@@ -19,6 +19,12 @@ export const TOKEN_STYLE = [
   { color: '#d81b60', icon: 'CRN', label: 'CRANE' },
   { color: '#5c6bc0', icon: 'FLP', label: 'FLIPPER' },
 ];
+export const MEDAL_SKINS = {
+  default: { color: '#dfe3e8', emissive: '#000000', glow: 0 },
+  platinum: { color: '#f3f7ff', emissive: '#5c7cff', glow: 0.08 },
+  crimson: { color: '#ff6b7d', emissive: '#7a0010', glow: 0.18 },
+  hellfire: { color: '#ffb066', emissive: '#ff3d00', glow: 0.3 },
+};
 export const GEM_COLORS = ['#ff1744', '#2979ff', '#00e676', '#ffc400', '#d500f9', '#e8f6ff'];
 
 const TRAY_CAP = 240;
@@ -65,6 +71,8 @@ export class CoinRenderer {
     ];
     const bigMats = metal(this.faces.big, '#f0c060', edgeBig);
     this._inst(KIND.SILVER, coinGeo, silverMats, hi);
+    this.silverMats = silverMats;
+    if (this.skin) this.setSkin(this.skin);
     this._inst(KIND.GOLD, coinGeo, goldMats, hi);
     this._inst(KIND.RAINBOW, coinGeo, rainbowMats, hi);
     this._inst(KIND.BIG, bigGeo, bigMats, true);
@@ -158,6 +166,19 @@ export class CoinRenderer {
     for (const m of all) for (const mat of (Array.isArray(m.material) ? m.material : [m.material])) {
       if (mat.userData.baseEnv === undefined) mat.userData.baseEnv = mat.envMapIntensity;
       mat.envMapIntensity = mat.userData.baseEnv * k;
+    }
+  }
+
+  // medal looks unlocked on the upper difficulties (tints the silver medals, field and tray)
+  setSkin(id) {
+    this.skin = id || 'default';
+    const sk = MEDAL_SKINS[this.skin] || MEDAL_SKINS.default;
+    for (const m of [this.silverMats, this.trayMeshes && this.trayMeshes[0].material].filter(Boolean)) {
+      for (const mat of m) {
+        mat.color.set(sk.color);
+        if (mat.emissive) { mat.emissive.set(sk.emissive); mat.emissiveIntensity = sk.glow; }
+        mat.needsUpdate = true;
+      }
     }
   }
 

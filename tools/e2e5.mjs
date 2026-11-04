@@ -38,5 +38,34 @@ if (only.includes('diff')) {
   console.log('after reload', await ev(() => __game.settings.difficulty), 'regenCap', await ev(() => __game.regenCap()), 'badge', await ev(() => document.querySelector('#hDiff').textContent));
   await shot('inferno');
 }
+if (only.includes('boss')) {
+  const types = (process.env.TYPES || 'golem').split(',');
+  for (const ty of types) {
+    const stage = ['golem', 'dragon', 'kraken', 'phantom'].indexOf(ty) + 1;
+    await ev(st => { __game.boss.st.stage[__game.settings.difficulty] = st; __game.boss.addGauge(1e6); }, stage);
+    await p.waitForFunction(() => __game.boss.active, null, { timeout: 60000 });
+    await p.waitForTimeout(2500); await shot('boss_' + ty);
+    for (const k of ['rock', 'jam', 'drain', 'freeze']) { await ev(k => __game.boss.attack(k), k); await p.waitForTimeout(700); if (ty === types[0]) await shot('atk_' + k); }
+    await ev(() => { __game.boss.active.weak = 3; __game.boss.onGate(0); });
+    await p.waitForTimeout(400); await shot('boss_weak_' + ty);
+    console.log(ty, 'hp', await ev(() => Math.round(__game.boss.active.hp) + '/' + __game.boss.active.hpMax), 'jam', await ev(() => __game.boss.jam.toFixed(1)), 'gateHalf', await ev(() => __game.gateHalf().toFixed(2)));
+    await ev(() => __game.boss.damage(1e5, 0));
+    await p.waitForTimeout(1200); await shot('boss_down_' + ty);
+    await p.waitForFunction(() => !__game.boss.active && !__game.features.busy, null, { timeout: 60000 });
+    await p.waitForTimeout(1500);
+  }
+  console.log('boss save', JSON.stringify(await ev(() => __game.save.boss)), 'unlocks', JSON.stringify(await ev(() => __game.unlocks())));
+  // retreat path
+  await ev(() => __game.boss.addGauge(1e6));
+  await p.waitForFunction(() => __game.boss.active, null, { timeout: 60000 });
+  await ev(() => { __game.boss.active.t = 0.1; });
+  await p.waitForTimeout(1000);
+  console.log('after retreat gauge', await ev(() => __game.boss.st.gauge), 'active', await ev(() => !!__game.boss.active));
+  await ev(() => { const u = __game.unlocks(); u.themes.push('obsidian', 'crimson'); u.skins.push('platinum', 'hellfire'); u.titles.push('shuraKing'); __game.settings.medalSkin = 'hellfire'; __game.settings.titleSel = 'shuraKing'; });
+  await ev(() => __game.ui.o.onSettings('medalSkin'));
+  await p.waitForTimeout(800); await shot('skin');
+  await ev(() => __game.ui.open('themes')); await p.waitForTimeout(500); await shot('themes');
+  await ev(() => document.querySelector('.body').scrollTo(0, 9999)); await p.waitForTimeout(300); await shot('themes2');
+}
 console.log(errs.join('\n') || 'no errors');
 await b.close();
