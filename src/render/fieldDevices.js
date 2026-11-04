@@ -116,10 +116,13 @@ export class FieldDevices {
     }
     this.outG = new THREE.Group();
     for (const sx of [-1, 1]) {
-      const m = new THREE.Mesh(new THREE.PlaneGeometry(w, 0.7), this.outMat);
-      m.rotation.x = -Math.PI / 2;
-      m.position.set(sx * (this.W - w / 2), 0.012, L.frontZ - 0.35);
-      this.outG.add(m);
+      // on the front face of the field edge (the field itself is covered by medals) ...
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(w, 0.5), this.outMat);
+      m.position.set(sx * (this.W - w / 2), -0.3, L.frontZ + 0.03);
+      // ... plus a glowing boundary post at the inner end of the zone
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.9, 0.06), new THREE.MeshBasicMaterial({ color: 0xff1a1a, toneMapped: false }));
+      post.position.set(sx * (this.W - w), -0.1, L.frontZ + 0.05);
+      this.outG.add(m, post);
     }
     this.group.add(this.outG);
   }
