@@ -31,6 +31,10 @@ tiers('challenges', [[1, 50], [10, 400]], '⏱');
 tiers('pockets', [[1, 20], [50, 300], [500, 2000]], '🕳');
 tiers('plinkos', [[1, 20], [25, 300]], '📍');
 tiers('croonBest', [[2, 50], [3, 300]], '🎯');
+tiers('catches', [[1, 20], [50, 300], [500, 2000]], '🥅');
+tiers('wheels', [[1, 30], [25, 300], [200, 2000]], '🎡');
+tiers('towers', [[1, 30], [20, 300]], '🗼');
+tiers('shakes', [[1, 20], [30, 300]], '🌋');
 export const ACHIEVEMENTS = A;
 
 const MISSION_POOL = [
@@ -45,6 +49,8 @@ const MISSION_POOL = [
   { id: 'gems', base: [1, 2, 3], feat: 'f_gems' },
   { id: 'pockets', base: [3, 6, 10], feat: 'f_bonusZone' },
   { id: 'diceRolls', base: [3, 6, 10], feat: 'f_sugoroku' },
+  { id: 'catches', base: [3, 6, 12], feat: 'f_catcher' },
+  { id: 'wheels', base: [1, 2, 3], feat: 'f_wheel' },
   { id: 'events', base: [1, 2, 3], feat: 'f_events' },
 ];
 

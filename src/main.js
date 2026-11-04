@@ -1,6 +1,10 @@
 import './ui/style.css';
-import { Stage, CAMERA_PRESETS } from './render/scene.js';
-import { TRAY } from './render/cabinet.js';
+import { Stage, CAMERA_PRESETS, SCREEN } from './render/scene.js';
+import { CroonTower } from './render/tower.js';
+import { MechReels, Hopper, LuckyWheel, CatcherCup, Beacons } from './render/machines.js';
+import { WHEEL, WHEEL_NEED } from './game/balance.js';
+import { CUP } from './core/layout.js';
+import { TRAY, POLE_X } from './render/cabinet.js';
 import { CoinRenderer } from './render/coins.js';
 import { Backboard } from './render/backboard.js';
 import { Effects } from './render/effects.js';
@@ -88,8 +92,18 @@ async function boot() {
   });
   const roulette = new Roulette(uiRoot, audio);
   const mini = new MiniGames(uiRoot, audio, () => s);
-  game = new Game({ stage, coins, backboard, effects, audio, physics, ui, save, roulette, mini });
+  const tower = new CroonTower(stage.scene, stage, audio, SCREEN);
+  game = new Game({ stage, coins, backboard, effects, audio, physics, ui, save, roulette, mini, tower });
   ui.bind(game);
+  const W0 = L.halfW;
+  const machines = {
+    reels: new MechReels(stage.scene, SCREEN, game.slot.reels.map(r => r.strip)),
+    hopper: new Hopper(stage.scene, W0),
+    wheel: new LuckyWheel(stage.scene, SCREEN, WHEEL),
+    cup: new CatcherCup(stage.scene),
+    beacons: new Beacons(stage.scene, [[-POLE_X(W0), 12.0, L.backWallZ - 1.5], [POLE_X(W0), 12.0, L.backWallZ - 1.5]]),
+  };
+  game.machines = machines;
   mini.isPaused = () => game.paused;
   physics.onFrame = msg => game.onPhysicsFrame(msg);
   let muted = false;
@@ -186,7 +200,7 @@ async function boot() {
   let pinch0 = 0, zoom0 = 0;
   canvas.addEventListener('pointerdown', e => {
     audio.unlock();
-    if (roulette.active || mini.active || ui.isOpen()) return;
+    if (roulette.active || mini.active || ui.isOpen() || tower.active) return;
     canvas.setPointerCapture(e.pointerId);
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (pointers.size === 2) {
@@ -220,7 +234,7 @@ async function boot() {
     if (e.code === 'Escape') { if (game.pauseReasons.has('user') && !ui.isOpen()) { ui.togglePause(false); return; } ui.isOpen() ? ui.close() : ui.open('shop'); return; }
     if (e.code === 'KeyP' && !ui.isOpen()) { ui.togglePause(); return; }
     if (e.code === 'F3') { e.preventDefault(); s.showFps = !s.showFps; ui.applyLayout(); return; }
-    if (ui.isOpen() || roulette.active || mini.active) return;
+    if (ui.isOpen() || roulette.active || mini.active || tower.active) return;
     if ((e.code === 'Space' || e.code === 'Enter') && !keys[e.code]) { keys[e.code] = true; game.press(); e.preventDefault(); }
     if (e.code === 'ArrowLeft' || e.code === 'KeyQ') { keys.left = true; e.preventDefault(); }
     if (e.code === 'ArrowRight' || e.code === 'KeyE') { keys.right = true; e.preventDefault(); }
@@ -257,7 +271,7 @@ async function boot() {
   if (pendingImport) setTimeout(() => doImport(pendingImport), 1200);
 
   // ---------- main loop ----------
-  let last = performance.now(), fps = 60, frameAcc = 0;
+  let last = performance.now(), fps = 60, frameAcc = 0, cupSent = null, cupX = 0;
   function loop(now) {
     requestAnimationFrame(loop);
     let dt = (now - last) / 1000;
@@ -276,7 +290,7 @@ async function boot() {
     const buf = physics.buf;
     let pz, gy, lidY;
     if (buf) {
-      coins.update(buf); pz = buf[1]; gy = buf[2]; lidY = buf[4];
+      coins.update(buf); pz = buf[1]; gy = buf[2]; lidY = buf[4]; cupX = buf[5];
       if (!paused) audio.pusherDrive(buf[3]);
       sparkleAcc += dt;
       if (sparkleAcc > 0.12) { sparkleAcc = 0; emitSparkles(buf); }
@@ -291,9 +305,24 @@ async function boot() {
     backboard.update(dt, {
       slot: game.slot, slotOn: s.f_slot, jpOn: s.f_jp, jpPool: save.jpPool, stock: save.stock, stockMax: game.stockMax(),
       fever: game.fx.fever > 0, effects: game.fx, combo: game.combo, theme: game.theme(), event: game.features.event,
+      mech: !!(s.f_mechReels && s.f_slot), wheelMeter: s.f_wheel ? (save.wheelMeter || 0) : -1, wheelNeed: WHEEL_NEED,
     });
     if (!paused) effects.update(dt);
     coins.updateTray(paused ? 0 : dt);
+    if (!paused) {
+      tower.update(dt);
+      const M = machines;
+      M.reels.group.visible = !!(s.f_mechReels && s.f_slot);
+      if (M.reels.group.visible) M.reels.update(dt, game.slot, { fever: game.fx.fever > 0 });
+      M.hopper.group.visible = !!s.f_hopper;
+      if (s.f_hopper) M.hopper.update(dt, game.showerQueue.length);
+      M.wheel.group.visible = !!s.f_wheel;
+      if (s.f_wheel) M.wheel.update(dt);
+      M.cup.update(dt, cupX, CUP.y - 0.2, CUP.z, !!s.f_catcher);
+      for (const b of M.beacons.items) b.g.visible = !!s.f_beacons;
+      if (s.f_beacons) M.beacons.update(dt, game.beaconMode());
+      if (s.f_catcher !== cupSent) { physics.cmd('cup', !!s.f_catcher); cupSent = s.f_catcher; }
+    }
     stage.render();
     ui.update(dt, { fps });
     if (now - lastSave > 15000) persist();

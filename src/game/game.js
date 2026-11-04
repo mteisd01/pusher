@@ -1,7 +1,7 @@
 // Central game orchestrator: input -> physics -> events -> rewards -> presentation
 import * as THREE from 'three';
 import { L, KIND, TOKEN } from '../core/layout.js';
-import { B, ITEM_TABLE, ROULETTE, UPGRADES, upgradeCost } from './balance.js';
+import { B, ITEM_TABLE, ROULETTE, UPGRADES, upgradeCost, WHEEL, WHEEL_NEED, COIN_TOWER } from './balance.js';
 import { Progression } from './progression.js';
 import { Slot } from './slot.js';
 import { Features } from './features.js';
@@ -158,7 +158,14 @@ export class Game {
         this.credit(B.value[kind] || 1, 'shower');
         continue;
       }
-      this.physics.cmd('spawn', kind, rand(-(L.halfW - 0.7), L.halfW - 0.7), rand(5.5, 7.5), rand(L.backWallZ + 0.7, L.frontZ - 3.5), tiltQ(1.2), { x: 0, y: rand(-3, 0), z: 0 }, 0, 0, { x: rand(-4, 4), y: 0, z: rand(-4, 4) });
+      const hop = this.settings.f_hopper && this.machines && this.machines.hopper;
+      if (hop) {
+        // poured from the hopper bucket that sweeps over the table
+        const pt = hop.pourPoint();
+        if (!pt) { this.showerQueue.unshift(kind); this.showerTimer = 0.05; break; }
+        this.physics.cmd('spawn', kind, pt.x, pt.y, pt.z, tiltQ(1.2), { x: rand(-1.2, 1.2), y: rand(-2, 0), z: rand(-1.5, 4.5) }, 0, 0, { x: rand(-6, 6), y: 0, z: rand(-6, 6) });
+        if (Math.random() < 0.5) this.audio.drop(pt.x / L.halfW * 0.8);
+      } else this.physics.cmd('spawn', kind, rand(-(L.halfW - 0.7), L.halfW - 0.7), rand(5.5, 7.5), rand(L.backWallZ + 0.7, L.frontZ - 3.5), tiltQ(1.2), { x: 0, y: rand(-3, 0), z: 0 }, 0, 0, { x: rand(-4, 4), y: 0, z: rand(-4, 4) });
       this.objCount++;
     }
     if (this.showerTimer < -0.5) this.showerTimer = 0;
@@ -174,12 +181,14 @@ export class Game {
 
   // ---------- physics events ----------
   onPhysicsFrame(msg) {
+    if (msg.croon && this.tower) this.tower.onPhysics(msg.croon);
     this.objCount = msg.n;
     this.physMs = msg.ms;
     for (const e of msg.ev) {
       if (e.t === 'out') this._onOut(e);
       else if (e.t === 'stroke') this._onStroke();
       else if (e.t === 'gate') this._onGate(e);
+      else if (e.t === 'catch') this._onCatch(e);
       else if (e.t === 'hit') this.audio.impact(e, L.halfW);
       else if (e.t === 'mv') this.motion = e.v;
     }
@@ -307,6 +316,7 @@ export class Game {
       case TOKEN.PLINKO: if (s.f_plinko) this.features.enqueue(() => this.features.plinko()); else this.shower(12); break;
       case TOKEN.DICE: if (s.f_sugoroku) this.features.addDice(2); else this.shower(8); break;
       case TOKEN.MAGNET: this.fx.magnet = (this.fx.magnet || 0) + 12; break;
+      case TOKEN.SHAKE: setTimeout(() => this.tableShake(1), 500); break;
       case TOKEN.BOMB: {
         const x = rand(-L.halfW + 3, L.halfW - 3), z = rand(1, L.frontZ - 2.5);
         setTimeout(() => {
@@ -498,6 +508,74 @@ export class Game {
     if (this._missionTimer > 30) { this._missionTimer = 0; this.prog.ensureMissions(); }
     this.prog.checkAchievements();
     this.payoutFlash = Math.max(0, this.payoutFlash - dt * 3);
+  }
+
+  // ---------- table gimmicks ----------
+  tableShake(k = 1) {
+    this.physics.cmd('shake', k);
+    this.stage.addShake(0.9 * k);
+    this.audio.thump(0, 0.8 * k, 45); this.audio.noiseHit(0, 0.35 * k, 'lowpass', 600, 0.9);
+    this.audio.pileMotion(400, 0.2);
+    this.vibrate(120);
+    this.prog.add('shakes');
+  }
+
+  // a stack of medals dropped onto the pusher shelf: it rides forward and topples
+  coinTower(x) {
+    if (x === undefined) x = rand(-(L.halfW - 2.5), L.halfW - 2.5);
+    const z = (L.backWallZ + L.pusherFrontMin) / 2 + rand(-0.4, 0.4);
+    const n = COIN_TOWER.coins;
+    for (let i = 0; i < n; i++) {
+      const kind = i >= n - COIN_TOWER.gold ? KIND.GOLD : KIND.SILVER;
+      this.physics.cmd('spawn', kind, x + rand(-0.02, 0.02), 5.2 + i * (L.coinHH * 2 + 0.004), z, null, { x: 0, y: -2, z: 0 }, 0, 0);
+    }
+    this.objCount += n;
+    this.ui.popup('TOWER!', x, 3, z, '#ffd34d', 1.4);
+    this.audio.brass && this.audio.brass(0, [67, 71, 74], 0.5, 0.18);
+    this.prog.add('towers');
+  }
+
+  _onCatch(e) {
+    const s = this.settings;
+    this.save.wheelMeter = (this.save.wheelMeter || 0) + 1;
+    this.prog.add('catches');
+    if (this.machines && this.machines.cup) this.machines.cup.flash = 0.8;
+    this.ui.popup('CATCH!', e.x, 2.6, L.dropZ, '#7CFFB2', 1.2);
+    this.audio.gate();
+    if (s.f_wheel && this.machines && this.machines.wheel && this.save.wheelMeter >= WHEEL_NEED && !this.wheelBusy) this.spinWheel();
+    else if (!s.f_wheel) { this.credit(1, 'catch'); this.save.wheelMeter = 0; }
+  }
+
+  async spinWheel() {
+    const w = this.machines.wheel;
+    this.save.wheelMeter = Math.max(0, (this.save.wheelMeter || 0) - WHEEL_NEED);
+    this.wheelBusy = true;
+    let r = Math.random() * WHEEL.reduce((a, b) => a + b.w, 0), idx = 0;
+    for (let i = 0; i < WHEEL.length; i++) if ((r -= WHEEL[i].w) < 0) { idx = i; break; }
+    const seg = WHEEL[idx];
+    this.audio.reelStart && this.audio.reelStart();
+    this.backboard.message('LUCKY WHEEL', '#7CFFB2', 1.6, 80);
+    await w.spin(idx, this.audio);
+    this.wheelBusy = false;
+    this.prog.add('wheels');
+    const s = this.settings;
+    this.ui.banner(`WHEEL: ${seg.label}`, seg.color, 1.8);
+    if (seg.n) { this.shower(seg.n); seg.n >= 50 ? this.audio.winBig() : this.audio.win('small'); }
+    else if (seg.item) { this.spawnRandomItem(); this.audio.itemGet(); }
+    else if (seg.dice) { if (s.f_sugoroku) this.features.addDice(seg.dice); else this.shower(8); this.audio.itemGet(); }
+    else if (seg.tower) this.coinTower();
+    else if (seg.shake) this.tableShake(1);
+    else if (seg.double) { this.fx.double += seg.double; this.audio.itemGet(); }
+    else if (seg.ball) { if (s.f_jp) { this.spawnItem(KIND.BALL); this.audio.winBig(); } else this.shower(30); }
+    if (this.save.wheelMeter >= WHEEL_NEED) setTimeout(() => { if (!this.wheelBusy) this.spinWheel(); }, 800);
+  }
+
+  beaconMode() {
+    if (this.tower && this.tower.active) return 'jp';
+    if (this.fx.fever > 0) return 'fever';
+    if (this.features.event) return 'event';
+    if (this.slot.flash > 0 || this.overlayBusy || this.wheelBusy) return 'win';
+    return 'idle';
   }
 
   lightMode() {

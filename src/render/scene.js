@@ -217,7 +217,7 @@ export class Stage {
   }
 
   addScreen(texture) {
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(SCREEN.w, SCREEN.h), new THREE.MeshBasicMaterial({ map: texture, color: 0xdddddd }));
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(SCREEN.w, SCREEN.h), new THREE.MeshBasicMaterial({ map: texture, color: 0xdddddd, alphaTest: 0.5 }));
     m.position.set(0, SCREEN.y, SCREEN.z + 0.12);
     this.scene.add(m);
     this.screen = m;
@@ -311,6 +311,9 @@ export class Stage {
     cam.lookAt(this.baseCam.look);
   }
 
+  // smoothly move the camera to a point of interest (e.g. the jackpot tower); null = back
+  setFocus(f) { this.focus = f || null; if (f) this.focusLast = f; }
+
   addShake(a) { if (this.settings.shake !== false) this.shake = Math.min(1.2, this.shake + a); }
 
   update(dt, st) {
@@ -391,8 +394,13 @@ export class Stage {
     if (this.baseCam) {
       this.shake = Math.max(0, this.shake - dt * 2.5);
       const s = this.shake * this.shake * 0.35;
-      cam.position.set(this.baseCam.pos.x + (Math.random() - 0.5) * s, this.baseCam.pos.y + (Math.random() - 0.5) * s, this.baseCam.pos.z);
-      cam.lookAt(this.baseCam.look);
+      this.focusK = Math.max(0, Math.min(1, (this.focusK || 0) + (this.focus ? dt : -dt) * 1.4));
+      const k = this.focusK * this.focusK * (3 - 2 * this.focusK);
+      const pos = this._cp || (this._cp = new THREE.Vector3()), look = this._cl || (this._cl = new THREE.Vector3());
+      pos.copy(this.baseCam.pos); look.copy(this.baseCam.look);
+      if (k > 0 && this.focusLast) { pos.lerp(this.focusLast.pos, k); look.lerp(this.focusLast.look, k); }
+      cam.position.set(pos.x + (Math.random() - 0.5) * s, pos.y + (Math.random() - 0.5) * s, pos.z);
+      cam.lookAt(look);
     }
   }
 

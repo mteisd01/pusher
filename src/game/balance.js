@@ -79,6 +79,7 @@ export const ITEM_TABLE = [
   { kind: KIND.TOKEN, extra: TOKEN.DICE, w: 8 },
   { kind: KIND.TOKEN, extra: TOKEN.MAGNET, w: 6 },
   { kind: KIND.TOKEN, extra: TOKEN.BOMB, w: 6 },
+  { kind: KIND.TOKEN, extra: TOKEN.SHAKE, w: 6 },
 ];
 
 export const GEM_RARITY_W = [62, 27, 9, 2];
@@ -147,7 +148,26 @@ export const EVENTS = [
   { id: 'hyper', w: 3, dur: 15 },
   { id: 'luckyGate', w: 3, dur: 20 },
   { id: 'challenge', w: 3, dur: 30 },
+  { id: 'tower', w: 3, dur: 8 },
+  { id: 'quake', w: 2, dur: 7 },
 ];
+
+// Lucky wheel beside the screen: spun after WHEEL_NEED medals fell into the catcher cup
+export const WHEEL_NEED = 12;
+export const WHEEL = [
+  { label: '3', n: 3, w: 26, color: '#c62828' },
+  { label: 'ITEM', item: true, w: 10, color: '#1565c0' },
+  { label: '10', n: 10, w: 16, color: '#ef6c00' },
+  { label: 'TOWER', tower: true, w: 10, color: '#6a1b9a' },
+  { label: '3', n: 3, w: 26, color: '#c62828' },
+  { label: 'DICE', dice: 1, w: 6, color: '#2e7d32' },
+  { label: '25', n: 25, w: 4, color: '#ad1457' },
+  { label: 'SHAKE', shake: true, w: 12, color: '#00838f' },
+  { label: '×2', double: 8, w: 6, color: '#4527a0' },
+  { label: 'BALL', ball: true, w: 2, color: '#f9a825' },
+];
+// Medal tower (event / wheel): stacked medals dropped onto the pusher shelf
+export const COIN_TOWER = { coins: 10, gold: 2 };
 export const EVENT_INTERVAL = [200, 400];   // seconds
 export const POCKET_CYCLE = { closed: 35, open: 6 };
 export const BONUS_ZONE = { half: 1.0, period: 7, mult: 2, stockChance: 0.12 };

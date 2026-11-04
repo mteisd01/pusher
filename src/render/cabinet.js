@@ -9,6 +9,8 @@ import { makeMaterials, panelArt, marqueeArt, grilleMaps, wornPlateMaps } from '
 import { makeFieldTexture } from './textures.js';
 
 export const TRAY = { y: -1.35, z0: 0.35, z1: 2.25 }; // relative to L.frontZ
+// LED poles stand outside the croon tower / lucky wheel even on narrow tables
+export const POLE_X = W => Math.max(W + 1.6, 12.4);
 
 const rbox = (w, h, d, r = 0.12, seg = 3) => new RoundedBoxGeometry(w, h, d, seg, Math.min(r, w / 2 - 1e-3, h / 2 - 1e-3, d / 2 - 1e-3));
 
@@ -121,8 +123,9 @@ export function buildCabinet(theme, W, SCREEN) {
     add(new THREE.BoxGeometry(0.08, 0.05, gzl), lm, sx * (W + 0.1), 3.36, gzc);
     add(new THREE.BoxGeometry(0.08, 0.05, gzl), lm, sx * (W + 0.1), 0.05, gzc);
     // LED pole beside the screen: chrome caps + frosted tube with a glowing core
-    const px = sx * (W + 1.6), pz = L.backWallZ - 1.5;
+    const px = sx * POLE_X(W), pz = L.backWallZ - 1.5;
     add(new THREE.CylinderGeometry(0.52, 0.6, 0.6, 24), M.chrome, px, 0.3, pz);
+    if (Math.abs(px) > W + 3.4) add(rbox(1.4, 4.6, 1.4, 0.12), M.paint, px, -2.3, pz); // free-standing pole base on narrow tables
     add(new THREE.CylinderGeometry(0.52, 0.52, 0.5, 24), M.chrome, px, 11.75, pz);
     const core = new THREE.MeshBasicMaterial({ color: theme.led[1 % theme.led.length], toneMapped: false }); ledMats.push(core);
     add(new THREE.CylinderGeometry(0.18, 0.18, 11, 12), core, px, 6, pz);
@@ -139,8 +142,15 @@ export function buildCabinet(theme, W, SCREEN) {
   add(new THREE.BoxGeometry(W * 2, 0.08, 0.06), lm2, 0, L.pusherH + 3.6, L.backWallZ + 0.02);
 
   // ---- backboard, screen bezel and topper marquee
-  add(rbox(W * 2 + 3.5, 10, 0.8, 0.2), M.paint, 0, 9.2, SCREEN.z - 0.6);
-  add(rbox(SCREEN.w + 1.7, SCREEN.h + 1.7, 0.36, 0.25), M.blackGloss, 0, SCREEN.y, SCREEN.z - 0.08);
+  // backboard sits deeper so that the mechanical reel drums fit behind the screen windows
+  add(rbox(W * 2 + 3.5, 10, 0.8, 0.2), M.paint, 0, 9.2, SCREEN.z - 1.4);
+  // bezel: an open frame (top, bottom, sides) closing the gap between screen and backboard
+  const bz = SCREEN.z - 0.52, bd = 1.3, bw2 = SCREEN.w + 1.7, bh2 = SCREEN.h + 1.7;
+  add(rbox(bw2, 0.86, bd, 0.2), M.blackGloss, 0, SCREEN.y + bh2 / 2 - 0.43, bz);
+  add(rbox(bw2, 0.86, bd, 0.2), M.blackGloss, 0, SCREEN.y - bh2 / 2 + 0.43, bz);
+  for (const sx of [-1, 1]) add(rbox(0.86, bh2, bd, 0.2), M.blackGloss, sx * (bw2 / 2 - 0.43), SCREEN.y, bz);
+  // dark reel box behind the screen
+  add(new THREE.BoxGeometry(SCREEN.w, SCREEN.h, 0.05), new THREE.MeshStandardMaterial({ color: 0x050507, roughness: 0.9 }), 0, SCREEN.y, SCREEN.z - 1.15);
   for (const [w, h, x, y] of [[SCREEN.w + 0.2, 0.08, 0, SCREEN.h / 2 + 0.06], [SCREEN.w + 0.2, 0.08, 0, -SCREEN.h / 2 - 0.06], [0.08, SCREEN.h + 0.2, SCREEN.w / 2 + 0.06, 0], [0.08, SCREEN.h + 0.2, -SCREEN.w / 2 - 0.06, 0]])
     add(new THREE.BoxGeometry(w, h, 0.1), M.chrome, x, SCREEN.y + y, SCREEN.z + 0.13);
   const topY = SCREEN.y + SCREEN.h / 2 + 1.75;

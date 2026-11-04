@@ -1,6 +1,6 @@
 // Physics core (Rapier). Pure logic, no DOM: used by the worker, the inline
 // fallback and the headless balance simulator (tools/sim.mjs).
-import { L, KIND, POCKET, GIANT } from './layout.js';
+import { L, KIND, POCKET, GIANT, CUP, cupXAt } from './layout.js';
 
 export class PusherPhysics {
   constructor(RAPIER, opts = {}) {
@@ -55,6 +55,7 @@ export class PusherPhysics {
     this.surf.set(lc.handle, 1);
     this.lidY = -0.5; this.pocketOpen = false;
     this.magnet = false;
+    this.cupOn = false; this.cupX = 0;
     this._box(W + 1, L.wallH / 2, 0.5, 0, L.pusherH + 0.07 + L.wallH / 2, L.backWallZ - 0.5, 0.15, 0.1, 3); // back wall over pusher
     this._box(W + 1, L.wallH / 2, 0.5, 0, L.wallH / 2, L.backZ - 0.5, 0.15, 0.1, 3);       // rear
     for (const s of [-1, 1]) {
@@ -200,6 +201,7 @@ export class PusherPhysics {
         this.lid.setNextKinematicTranslation({ x: POCKET.x, y: this.lidY, z: POCKET.z });
       }
       if (this.magnet) this._magnet(h);
+      this.cupX = cupXAt(this.time);
       for (const g of this.guards) {
         const ty = this.wallsUp ? 1.25 : -7;
         if (g.y !== ty) {
@@ -231,6 +233,12 @@ export class PusherPhysics {
         this.remove(o);
         continue;
       }
+      // catcher cup on the shelf: player-dropped medals falling into it are caught
+      if (this.cupOn && (o.flags & 1) && o.y >= CUP.y && t.y < CUP.y && Math.abs(t.x - this.cupX) < CUP.r && Math.abs(t.z - CUP.z) < CUP.r) {
+        ev.push({ t: 'catch', id: o.id, x: t.x, kind: o.kind });
+        this.remove(o);
+        continue;
+      }
       // gate crossing for player-dropped coins
       if (!o.gated && o.y >= L.gateY && t.y < L.gateY) {
         o.gated = true;
@@ -257,6 +265,16 @@ export class PusherPhysics {
       if (Math.abs(o.x) < W - 3 || o.z < L.sideWallEnd - 2 || o.y > 2) continue;
       const m = o.body.mass();
       o.body.applyImpulse({ x: -Math.sign(o.x) * m * 9 * h, y: 0, z: 0 }, true);
+    }
+  }
+
+  // whole-table shake: every medal on the field gets a small kick (SHAKE item / event)
+  shake(k = 1) {
+    for (const o of this.objs) {
+      if (o.y > 3 || o.kind === KIND.BALL) continue;
+      const m = o.body.mass();
+      o.body.applyImpulse({ x: (Math.random() - 0.5) * 2.4 * m * k, y: (1.5 + Math.random() * 2) * m * k, z: (Math.random() * 1.0 - 0.3) * m * k }, true);
+      o.body.applyTorqueImpulse({ x: (Math.random() - 0.5) * 0.05 * m * k, y: 0, z: (Math.random() - 0.5) * 0.05 * m * k }, true);
     }
   }
 
@@ -333,6 +351,7 @@ export class PusherPhysics {
     buf[2] = this.guards[0].y;
     buf[3] = this.phase;
     buf[4] = this.lidY;
+    buf[5] = this.cupX;
     let k = 8;
     for (const o of list) {
       const t = o.body.translation(), r = o.body.rotation();

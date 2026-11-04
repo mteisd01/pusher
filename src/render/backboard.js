@@ -143,6 +143,12 @@ export class Backboard {
     const symH = 112;
     for (let i = 0; i < 3; i++) {
       const rx = x0 + i * (rw + gap);
+      if (st.mech) {
+        // real 3D reels sit behind this window: punch a transparent hole
+        g.save(); roundRect(g, rx, top, rw, rh, 14); g.clip(); g.clearRect(rx, top, rw, rh); g.restore();
+        g.strokeStyle = '#d4a52a'; g.lineWidth = 6; roundRect(g, rx, top, rw, rh, 14); g.stroke();
+        continue;
+      }
       g.save();
       const rg = g.createLinearGradient(0, top, 0, top + rh);
       rg.addColorStop(0, '#9a9a9a'); rg.addColorStop(0.15, '#fff'); rg.addColorStop(0.85, '#fff'); rg.addColorStop(1, '#9a9a9a');
@@ -198,6 +204,7 @@ export class Backboard {
     if (fx.turbo > 0) right.push(['TURBO', '#ff9f43'], [`${Math.ceil(fx.turbo)}s`, '#fff', 30]);
     if (fx.double > 0) right.push(['×2', '#c38bff', 30], [`${Math.ceil(fx.double)}s`, '#fff', 30]);
     if (fx.magnet > 0) right.push(['MAGNET', '#ff6b6b', 20], [`${Math.ceil(fx.magnet)}s`, '#fff', 30]);
+    if (st.wheelMeter >= 0 && right.length < 4) right.push(['WHEEL', '#7CFFB2', 22], [`${Math.min(st.wheelMeter, st.wheelNeed)}/${st.wheelNeed}`, '#7CFFB2', 30]);
     if (st.event) {
       const ev = st.event;
       const lines = [['EVENT', '#ff8a65'], [`${Math.ceil(ev.t)}s`, '#fff', 30]];

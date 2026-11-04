@@ -46,6 +46,7 @@ export class Features {
       if (this.event) {
         this.event.t -= dt;
         if (this.event.id === 'challenge') this._challengeTick();
+        if (this.event.id === 'quake' && this.event.quakes > 0 && (this.event.nextQuake -= dt) <= 0) { this.event.quakes--; this.event.nextQuake = 2; this.g.tableShake(0.8); }
         if (this.event.t <= 0) this._endEvent();
       } else if (!this.busy) {
         this.nextEvent -= dt;
@@ -181,6 +182,8 @@ export class Features {
         g.shower(20); g.shower(1, KIND.BIG); g.shower(3, KIND.GOLD);
         break;
       case 'giant': setTimeout(() => this.spawnGiant(), 1500); break;
+      case 'tower': g.coinTower(rand(-(L.halfW - 2.5), -1.5)); setTimeout(() => g.coinTower(rand(1.5, L.halfW - 2.5)), 1400); break;
+      case 'quake': this.event.quakes = 3; this.event.nextQuake = 1.2; break;
       case 'hyper': g.physics.cmd('stroke', g.upg('stroke') * 0.3 + 1.6); break;
       case 'challenge': this.event.start = g.save.stats.won || 0; this.event.target = Math.round(18 + L.halfW * 1.2); break;
     }
@@ -216,7 +219,9 @@ export class Features {
       title: ['JP CHANCE', 'SECOND STAGE', 'FINAL STAGE'][i],
       holes: st.holes.map(h => ({ ...h, w: h.good ? 1 + luck : 1 })),
     }));
-    const r = await g.mini.croon(stages, g.save.jpPool);
+    const r = this.s.f_tower3d && g.tower
+      ? await g.tower.run(stages, luck, g.physics, { camera: this.s.towerCam })
+      : await g.mini.croon(stages, g.save.jpPool);
     const h = r.hole;
     g.prog.max('croonBest', r.stage + (h.good ? 1 : 0));
     if (h.jp) return g.payJackpot();

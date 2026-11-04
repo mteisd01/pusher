@@ -1,9 +1,10 @@
 // Message-driven wrapper around PusherPhysics; shared by worker and inline mode.
 import RAPIER from '@dimforge/rapier3d-compat';
 import { PusherPhysics } from './physics.js';
+import { CroonPhysics } from './croonPhysics.js';
 
 export function createEngine(post) {
-  let phys = null;
+  let phys = null, croon = null;
   let buf = null;
   const ev = [];
   const handle = async (msg, transferBack) => {
@@ -27,6 +28,11 @@ export function createEngine(post) {
         const ms = performance.now() - t0;
         buf = phys.pack(buf);
         const out = { t: 'frame', buf, ev: ev.slice(), ms, n: phys.objs.length };
+        if (croon && croon.ball) {
+          const r = croon.active ? croon.step(msg.dt) : null;
+          out.croon = { s: croon.state(), hole: r ? r.hole : -1 };
+          if (r) croon.stop();
+        }
         if (msg.snap) out.snap = phys.snapshot();
         post(out, transferBack ? [buf.buffer] : undefined);
         buf = null;
@@ -40,6 +46,8 @@ export function createEngine(post) {
       case 'walls': phys.wallsUp = !!c[1]; break;
       case 'pocket': phys.pocketOpen = !!c[1]; break;
       case 'magnet': phys.magnet = !!c[1]; break;
+      case 'cup': phys.cupOn = !!c[1]; break;
+      case 'shake': phys.shake(c[1]); break;
       case 'blast': phys.blast(c[1], c[2], c[3], c[4]); break;
       case 'speed': phys.speed = c[1]; break;
       case 'stroke': phys.strokeBonus = c[1]; break;
@@ -48,6 +56,8 @@ export function createEngine(post) {
       case 'clear': phys.clear(); break;
       case 'prefill': phys.prefill(c[1]); break;
       case 'restore': phys.restore(c[1]); break;
+      case 'croonStart': if (!croon) croon = new CroonPhysics(RAPIER); croon.start(c[1], c[2]); break;
+      case 'croonStop': if (croon) croon.stop(); break;
       case 'trim': {
         // remove the oldest coins resting far from the front when over budget
         const over = phys.objs.length - c[1];

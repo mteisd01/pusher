@@ -14,6 +14,7 @@ export const TOKEN_STYLE = [
   { color: '#8d6e63', icon: 'D6', label: 'DICE' },
   { color: '#d32f2f', icon: 'MAG', label: 'MAGNET' },
   { color: '#37474f', icon: 'BOM', label: 'BOMB' },
+  { color: '#00838f', icon: 'SHK', label: 'SHAKE' },
 ];
 export const GEM_COLORS = ['#ff1744', '#2979ff', '#00e676', '#ffc400', '#d500f9', '#e8f6ff'];
 
