@@ -319,7 +319,7 @@ export class Game {
       }
       case KIND.ROCK:
         this.prog.add('rocks');
-        if (this.boss.active) { this.boss.damage(BOSS.dmg.rock, e.x, true); }
+        if (this.boss.active) { this.boss.damage(BOSS.dmg.rock, e.x, false, true); this.ui.popup(`COUNTER -${BOSS.dmg.rock}`, e.x, 5.5, L.backWallZ + 0.5, '#ffd34d', 1.4); }
         this.credit(ROCK_REWARD, 'rock');
         this.ui.popup(`ROCK +${ROCK_REWARD}`, e.x, 0.6, L.frontZ, '#c8b89a', 1.3);
         this.audio.thump(e.x / L.halfW * 0.8, 0.5, 80);

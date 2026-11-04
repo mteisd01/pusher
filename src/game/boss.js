@@ -127,10 +127,11 @@ export class BossSystem {
   }
 
   // damage from any player action; src is only used for stats / effects
-  damage(n, x = 0, crit = false) {
+  // crit: weak-point hit (x critMult); pierce: gets through the barrier without the multiplier
+  damage(n, x = 0, crit = false, pierce = false) {
     const a = this.active;
     if (!a || n <= 0) return 0;
-    if (a.barrier > 0 && !crit) { return 0; }
+    if (a.barrier > 0 && !crit && !pierce) { return 0; }
     const v = n * (crit ? BOSS.critMult : 1);
     a.hp -= v; a.idle = 0; a.hits++; a.dealt += v;
     this.g.prog.add('bossDamage', Math.round(v));
