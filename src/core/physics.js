@@ -23,7 +23,9 @@ export class PusherPhysics {
     this.queue = new RAPIER.EventQueue(true);
     this.surf = new Map();      // static collider handle -> surface type (1 plate, 2 glass, 3 wall)
     this.colObj = new Map();    // dynamic collider handle -> obj
-    this.prevPairs = new Set(); this.curPairs = new Set();
+    this.pairSeen = new Map();  // contact pair key -> last step it carried force (hysteresis)
+    this.stepNo = 0;
+    this.pusherVz = 0;
     this.hits = [];
     this._buildStatic();
   }
@@ -72,6 +74,7 @@ export class PusherPhysics {
     const pc = this.world.createCollider(
       R.ColliderDesc.cuboid(W - 0.02, L.pusherH / 2 - 0.005, L.pusherLen / 2).setFriction(0.4).setRestitution(0.02), this.pusher);
     this.surf.set(pc.handle, 1);
+    this.pusherCol = pc.handle;
   }
 
   strokeRange() { return [L.pusherFrontMin, L.pusherFrontMax + this.strokeBonus]; }
@@ -184,8 +187,13 @@ export class PusherPhysics {
       this.time += h;
       const ph = this.phase + h * this.speed / this.period;
       if (ph >= 1) ev.push({ t: 'stroke' });
+      const z0 = this.pusherZ(this.phase);
       this.phase = ph % 1;
-      this.pusher.setNextKinematicTranslation({ x: 0, y: L.pusherH / 2, z: this.pusherZ(this.phase) });
+      const z1 = this.pusherZ(this.phase);
+      this.pusherVz = (z1 - z0) / h;
+      this.pusher.setNextKinematicTranslation({ x: 0, y: L.pusherH / 2, z: z1 });
+      this.stepNo++;
+      if (this.stepNo % 6 === 0) this._restDamping();
       const lidT = this.pocketOpen ? -1.6 : -0.5;
       if (this.lidY !== lidT) {
         this.lidY += Math.sign(lidT - this.lidY) * Math.min(Math.abs(lidT - this.lidY), h * 4);
@@ -215,7 +223,8 @@ export class PusherPhysics {
     for (let i = 0; i < list.length; i++) {
       const o = list[i];
       const t = o.body.translation();
-      if (t.y < L.lostY || Math.abs(t.x) > L.halfW + 6) {
+      // medals that fell over the front edge are counted once they reach the payout tray
+      if (t.y < L.lostY || Math.abs(t.x) > L.halfW + 6 || (t.y < L.trayY && t.z > L.frontZ + 0.1 && Math.abs(t.x) < L.halfW + 0.3)) {
         const won = o.z > L.frontZ - 0.3 && Math.abs(o.x) < L.halfW + 0.3;
         const pocket = !won && Math.abs(o.x - POCKET.x) < POCKET.hw + 0.4 && Math.abs(o.z - POCKET.z) < POCKET.hd + 0.4;
         ev.push({ t: 'out', id: o.id, kind: o.kind, extra: o.extra, won, pocket, x: o.x });
@@ -230,7 +239,7 @@ export class PusherPhysics {
       // overall motion of the pile (drives the "shuffling" ambience)
       if (!o.body.isSleeping()) {
         const v = o.body.linvel();
-        const sp = Math.abs(v.x) + Math.abs(v.z);
+        const sp = Math.abs(v.x) + Math.abs(v.z - (this._onShelf(o) ? this.pusherVz : 0));
         if (sp > 0.25 && t.y < 2.5) motion += Math.min(sp, 3);
       }
       o.x = t.x; o.y = t.y; o.z = t.z;
@@ -261,26 +270,58 @@ export class PusherPhysics {
     }
   }
 
-  // Turn newly-started strong contacts into audio impact events
+  _onShelf(o) { return o.y > L.pusherH - 0.1 && o.y < L.pusherH + 1.2 && o.z < this.pusherFrontAt(this.phase) && o.z > L.backWallZ - 0.2; }
+
+  // Rapier never lets the pile sleep (the moving pusher keeps the island awake), and with
+  // few solver iterations resting coins shiver forever. Coins that are (relative to what
+  // they rest on) nearly still get heavy damping; anything really moving gets normal damping.
+  _restDamping() {
+    for (const o of this.objs) {
+      if (o.kind === KIND.BALL) continue;
+      const v = o.body.linvel(), a = o.body.angvel();
+      const vz = v.z - (this._onShelf(o) ? this.pusherVz : 0);
+      const lin = Math.hypot(v.x, v.y, vz), ang = Math.hypot(a.x, a.y, a.z);
+      if (!o.rest && lin < 0.3 && ang < 1.6 && o.y < 3) { o.rest = true; o.body.setAngularDamping(25); o.body.setLinearDamping(2.5); }
+      else if (o.rest && (lin > 0.9 || ang > 4 || o.y >= 3)) { o.rest = false; o.body.setAngularDamping(0.3); o.body.setLinearDamping(0.04); }
+    }
+  }
+
+  _relSpeed(o, other, colHandle) {
+    const v = o.body.linvel();
+    let ox = 0, oy = 0, oz = 0;
+    if (other) { const w = other.body.linvel(); ox = w.x; oy = w.y; oz = w.z; }
+    else if (colHandle === this.pusherCol) oz = this.pusherVz;
+    return Math.hypot(v.x - ox, v.y - oy, v.z - oz);
+  }
+
+  // Turn newly-started strong contacts into audio impact events. A pair only counts as new
+  // when it has not carried force for a while (hysteresis), the bodies actually approach
+  // each other with some speed (filters solver jitter) and the object is off cooldown.
   _collectHits() {
-    const cur = this.curPairs, prev = this.prevPairs;
-    cur.clear();
+    const seen = this.pairSeen, now = this.stepNo;
     this.queue.drainContactForceEvents(e => {
       const h1 = e.collider1(), h2 = e.collider2();
       const key = h1 < h2 ? h1 * 1048576 + h2 : h2 * 1048576 + h1;
-      cur.add(key);
-      if (prev.has(key) || this.hits.length > 40) return;
+      const last = seen.get(key);
+      seen.set(key, now);
+      if (last !== undefined && now - last < 20) return;
+      if (this.hits.length > 40) return;
       const a = this.colObj.get(h1), b = this.colObj.get(h2);
       const o = a || b;
       if (!o) return;
       const other = a && b ? (a === o ? b : a) : null;
+      const rel = this._relSpeed(o, other, a ? h2 : h1);
+      if (rel < 0.6) return;
+      if (o.hitAt && this.time - o.hitAt < 0.12) return;
+      o.hitAt = this.time;
       const surf = other ? 0 : (this.surf.get(a ? h2 : h1) || 1);
       const f = e.maxForceMagnitude();
       const t = o.body.translation();
       const k2 = other ? Math.max(o.kind, other.kind) : o.kind;
-      this.hits.push({ t: 'hit', x: t.x, y: t.y, z: t.z, s: Math.min(1, Math.log(1 + f / 25) / 3.2), kind: k2, surf });
+      const s = Math.min(1, Math.log(1 + f / 25) / 3.2) * Math.min(1, 0.45 + rel * 0.18);
+      this.hits.push({ t: 'hit', x: t.x, y: t.y, z: t.z, s, kind: k2, surf });
     });
-    this.curPairs = prev; this.prevPairs = cur;
+    if (now % 300 === 0) for (const [k, v] of seen) if (now - v > 60) seen.delete(k);
   }
 
   // Pack transforms: [id, kind, extra, x, y, z, qx, qy, qz, qw] per object

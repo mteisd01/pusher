@@ -19,6 +19,7 @@ export const L = {
   dropZ: -7.5,
   gateY: 3.1,
   lostY: -2.5,
+  trayY: -1.15,        // top of the payout tray (won medals are removed here)
   gravity: -48,
 };
 

@@ -4,7 +4,12 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { L, POCKET } from '../core/layout.js';
-import { makeFieldTexture, makeSurfaceTexture } from './textures.js';
+import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
+import { RectAreaLightUniformsLib } from 'three/examples/jsm/lights/RectAreaLightUniformsLib.js';
+import { makeSurfaceTexture } from './textures.js';
+import { wornPlateMaps, hairlineMaps } from './materials.js';
+import { buildCabinet, TRAY } from './cabinet.js';
+import { buildRoom, makeEnvScene } from './room.js';
 
 let W = L.halfW;
 export const SCREEN = { w: 14, h: 7, y: 8.9, z: L.backWallZ - 1.15 };
@@ -62,6 +67,12 @@ export class Stage {
       s.add(pl);
       this.sideLights.push(pl);
     }
+    // canopy LED bar over the field (soft rectangular highlight on metal and coins)
+    RectAreaLightUniformsLib.init();
+    this.canopy = new THREE.RectAreaLight(0xffffff, 0.9, W * 2, 2.2);
+    this.canopy.position.set(0, 12, 1.5);
+    this.canopy.lookAt(0, 0, -0.5);
+    s.add(this.canopy);
     this.frontLight = new THREE.PointLight(0xffffff, 0, 18, 2);
     this.frontLight.position.set(0, 2, L.frontZ + 2);
     s.add(this.frontLight);
@@ -83,8 +94,9 @@ export class Stage {
     this.bonusLip.position.set(0, -0.1, L.frontZ + 0.13);
     s.add(this.bonusLip);
     // Pusher
-    this.pusherMat = new THREE.MeshStandardMaterial({ color: 0xcfd3da, metalness: 0.9, roughness: 0.28 });
-    this.pusherTopMat = new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 0.7, roughness: 0.38 });
+    const hair = hairlineMaps();
+    this.pusherMat = new THREE.MeshPhysicalMaterial({ color: 0xcfd3da, metalness: 1, roughness: 0.75, roughnessMap: hair.rough, normalMap: hair.normal, normalScale: new THREE.Vector2(0.25, 0.25), anisotropy: 0.6 });
+    this.pusherTopMat = new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 0.75, roughness: 1, normalScale: new THREE.Vector2(0.3, 0.3) });
     const pg = new THREE.BoxGeometry(W * 2 - 0.04, L.pusherH, L.pusherLen);
     this.pusher = new THREE.Mesh(pg, [this.pusherMat, this.pusherMat, this.pusherTopMat, this.pusherMat, this.pusherMat, this.pusherMat]);
     this.pusher.receiveShadow = true; this.pusher.castShadow = true;
@@ -156,124 +168,46 @@ export class Stage {
     s.add(this.ledStrips);
   }
 
-  // Build the static cabinet for a theme
+  // Build the static cabinet + the arcade room for a theme
   setTheme(theme) {
     this.theme = theme;
     const g = this.cabinet;
     g.traverse(o => { if (o.geometry) o.geometry.dispose(); });
     g.clear();
     this.ledStrips.clear();
-    this.ledMats = [];
-    this.scene.background = makeGradientBg(theme.bgTop, theme.bgBottom);
+    const detail = this.settings.roomDetail || 'full';
+    this.scene.background = detail === 'off' ? makeGradientBg(theme.bgTop, theme.bgBottom) : new THREE.Color(theme.fog).multiplyScalar(0.6);
     if (this.envMap) this.envMap.dispose();
     this.envMap = this.pmrem.fromScene(makeEnvScene(theme), 0.03).texture;
     this.scene.environment = this.settings.reflections === false ? null : this.envMap;
-    this.scene.fog = new THREE.Fog(theme.fog, 45, 110);
+    this.scene.fog = new THREE.Fog(theme.fog, 40, 105);
     this.hemi.color.set(theme.light);
     this.key.color.set(theme.light);
+    if (this.canopy) this.canopy.color.set(theme.light);
+    // pusher: hairline stainless sides, worn plate on top
     this.pusherMat.color.set(theme.pusher);
+    const worn = wornPlateMaps();
     const plate = makeSurfaceTexture('plate', '#9aa0a8', '#5a6068', 256, 3);
     plate.repeat.set(8, 4);
-    this.pusherTopMat.map = plate; this.pusherTopMat.color.set(theme.pusher); this.pusherTopMat.needsUpdate = true;
-    // Field floor
-    const ftex = makeFieldTexture(theme, W);
-    const floorMat = new THREE.MeshStandardMaterial({ map: ftex, metalness: 0.55, roughness: 0.42 });
-    // floor with a rectangular hole for the center pocket
-    const z0 = L.backWallZ, z1 = L.frontZ, P = POCKET;
-    const shape = new THREE.Shape();
-    shape.moveTo(-W, -z1); shape.lineTo(W, -z1); shape.lineTo(W, -z0); shape.lineTo(-W, -z0); shape.closePath();
-    const hole = new THREE.Path();
-    hole.moveTo(P.x - P.hw, -(P.z - P.hd)); hole.lineTo(P.x - P.hw, -(P.z + P.hd)); hole.lineTo(P.x + P.hw, -(P.z + P.hd)); hole.lineTo(P.x + P.hw, -(P.z - P.hd)); hole.closePath();
-    shape.holes.push(hole);
-    const fg = new THREE.ShapeGeometry(shape);
-    const pa = fg.attributes.position, uv = fg.attributes.uv;
-    for (let i = 0; i < pa.count; i++) uv.setXY(i, (pa.getX(i) + W) / (2 * W), (pa.getY(i) + z1) / (z1 - z0));
-    const fl = new THREE.Mesh(fg, floorMat);
-    fl.rotation.x = -Math.PI / 2;
-    fl.receiveShadow = true;
-    g.add(fl);
-    // pocket shaft + rim
-    const shaft = new THREE.Mesh(new THREE.BoxGeometry(P.hw * 2, 2, P.hd * 2), new THREE.MeshStandardMaterial({ color: 0x060606, roughness: 0.9, side: THREE.BackSide }));
-    shaft.position.set(P.x, -1, P.z); g.add(shaft);
-    this.pocketRimMat = new THREE.MeshBasicMaterial({ color: theme.accent, toneMapped: false });
-    for (const [w, d, x, z] of [[P.hw * 2 + 0.2, 0.1, 0, -P.hd - 0.05], [P.hw * 2 + 0.2, 0.1, 0, P.hd + 0.05], [0.1, P.hd * 2, -P.hw - 0.05, 0], [0.1, P.hd * 2, P.hw + 0.05, 0]]) {
-      const r = new THREE.Mesh(new THREE.BoxGeometry(w, 0.03, d), this.pocketRimMat);
-      r.position.set(P.x + x, 0.012, P.z + z); g.add(r);
+    this.pusherTopMat.map = plate; this.pusherTopMat.color.set(theme.pusher);
+    this.pusherTopMat.roughnessMap = worn.rough; this.pusherTopMat.normalMap = worn.normal; this.pusherTopMat.needsUpdate = true;
+    const cab = buildCabinet(theme, W, SCREEN);
+    g.add(cab.group);
+    this.cab = cab;
+    this.ledMats = cab.ledMats;
+    this.dots = cab.dots;
+    this.pocketRimMat = cab.glowMats.pocketRim;
+    this.payoutGlowMat = cab.glowMats.payout;
+    this.gutterMats = [cab.glowMats['gutter-1'], cab.glowMats.gutter1];
+    this.marqueeMat = cab.glowMats.marquee;
+    // room
+    if (this.room) { this.scene.remove(this.room.group); this.room.group.traverse(o => { if (o.geometry) o.geometry.dispose(); }); }
+    this.room = buildRoom(theme, W, detail);
+    this.scene.add(this.room.group);
+    if (detail === 'off') {
+      const floor = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), new THREE.MeshStandardMaterial({ color: theme.bgBottom, roughness: 0.9 }));
+      floor.rotation.x = -Math.PI / 2; floor.position.y = -4.6; g.add(floor);
     }
-    // Front lip
-    const chrome = new THREE.MeshStandardMaterial({ color: 0xf0f0f4, metalness: 1, roughness: 0.12 });
-    const lip = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, W * 2 + 0.2, 16), chrome);
-    lip.rotation.z = Math.PI / 2; lip.position.set(0, -0.1, L.frontZ + 0.02);
-    g.add(lip);
-    // Payout chute (dark pit with glow)
-    const pitMat = new THREE.MeshStandardMaterial({ color: 0x050505, roughness: 0.9 });
-    const pit = new THREE.Mesh(new THREE.BoxGeometry(W * 2 + 6, 0.2, 4), pitMat);
-    pit.position.set(0, -3, L.frontZ + 2); g.add(pit);
-    this.payoutGlowMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(theme.accent), toneMapped: false, transparent: true, opacity: 0.6 });
-    const glow = new THREE.Mesh(new THREE.PlaneGeometry(W * 2, 0.15), this.payoutGlowMat);
-    glow.position.set(0, -0.32, L.frontZ + 0.05); g.add(glow);
-    // Front panel of the cabinet
-    const cabTex = makeSurfaceTexture(theme.cabinetKind, theme.cabinet, theme.trim, 512, 9);
-    cabTex.repeat.set(4, 1);
-    const cabMat = new THREE.MeshStandardMaterial({ color: 0xffffff, map: cabTex, metalness: 0.2, roughness: 0.6 });
-    const trimMat = new THREE.MeshStandardMaterial({ color: theme.trim, metalness: 1, roughness: 0.25 });
-    const front = new THREE.Mesh(new THREE.BoxGeometry(W * 2 + 7, 4, 0.6), cabMat);
-    front.position.set(0, -2.6, L.frontZ + 3.4); g.add(front);
-    const frontTrim = new THREE.Mesh(new THREE.BoxGeometry(W * 2 + 7, 0.25, 0.7), trimMat);
-    frontTrim.position.set(0, -0.55, L.frontZ + 3.4); g.add(frontTrim);
-    // Cabinet sides (beyond gutters)
-    for (const sx of [-1, 1]) {
-      const side = new THREE.Mesh(new THREE.BoxGeometry(2.4, 9, L.frontZ - L.backZ + 5), cabMat);
-      side.position.set(sx * (W + 2.3), 0.2, (L.frontZ + L.backZ) / 2 + 2);
-      side.receiveShadow = true;
-      g.add(side);
-      const st = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.2, L.frontZ - L.backZ + 5), trimMat);
-      st.position.set(sx * (W + 2.3), 4.75, (L.frontZ + L.backZ) / 2 + 2); g.add(st);
-      // gutter pit (lost zone) — red glow
-      const gm = new THREE.MeshBasicMaterial({ color: 0xff2030, transparent: true, opacity: 0.55, toneMapped: false });
-      const gp = new THREE.Mesh(new THREE.PlaneGeometry(1.0, L.frontZ - L.sideWallEnd), gm);
-      gp.rotation.x = -Math.PI / 2; gp.position.set(sx * (W + 0.55), -1.2, (L.frontZ + L.sideWallEnd) / 2); g.add(gp);
-      // glass side walls
-      const glass = new THREE.Mesh(new THREE.BoxGeometry(0.08, 3.4, L.sideWallEnd - L.backWallZ),
-        new THREE.MeshPhysicalMaterial({ color: theme.glass, metalness: 0, roughness: 0.05, transparent: true, opacity: 0.16, depthWrite: false }));
-      glass.position.set(sx * (W + 0.06), 1.7, (L.sideWallEnd + L.backWallZ) / 2); g.add(glass);
-      const rail = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.18, L.sideWallEnd - L.backWallZ), trimMat);
-      rail.position.set(sx * (W + 0.08), 3.45, (L.sideWallEnd + L.backWallZ) / 2); g.add(rail);
-      // LED strips
-      const lm = new THREE.MeshBasicMaterial({ color: theme.led[0], toneMapped: false });
-      this.ledMats.push(lm);
-      const strip = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.06, L.sideWallEnd - L.backWallZ), lm);
-      strip.position.set(sx * (W + 0.08), 3.57, (L.sideWallEnd + L.backWallZ) / 2); this.ledStrips.add(strip);
-      const strip2 = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.06, L.sideWallEnd - L.backWallZ), lm);
-      strip2.position.set(sx * (W + 0.08), 0.06, (L.sideWallEnd + L.backWallZ) / 2); this.ledStrips.add(strip2);
-      // Pillars beside the screen
-      const pil = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.55, 12, 20), trimMat);
-      pil.position.set(sx * (W + 1.6), 6, L.backWallZ - 1.5); g.add(pil);
-    }
-    // Back wall over the pusher (drop zone panel)
-    const bwTex = makeSurfaceTexture(theme.cabinetKind, theme.cabinet, theme.trim, 512, 21);
-    bwTex.repeat.set(3, 1);
-    const bwMat = new THREE.MeshStandardMaterial({ map: bwTex, metalness: 0.25, roughness: 0.5 });
-    const bw = new THREE.Mesh(new THREE.BoxGeometry(W * 2 + 0.2, 3.6, 1.0), bwMat);
-    bw.position.set(0, L.pusherH + 0.07 + 1.8, L.backWallZ - 0.5); bw.receiveShadow = true; g.add(bw);
-    const bwTrim = new THREE.Mesh(new THREE.BoxGeometry(W * 2 + 0.3, 0.2, 1.1), trimMat);
-    bwTrim.position.set(0, L.pusherH + 0.12, L.backWallZ - 0.5); g.add(bwTrim);
-    const lm2 = new THREE.MeshBasicMaterial({ color: theme.led[1], toneMapped: false });
-    this.ledMats.push(lm2);
-    const s3 = new THREE.Mesh(new THREE.BoxGeometry(W * 2, 0.08, 0.06), lm2);
-    s3.position.set(0, L.pusherH + 3.6, L.backWallZ + 0.02); this.ledStrips.add(s3);
-    // Backboard behind the screen
-    const bb = new THREE.Mesh(new THREE.BoxGeometry(W * 2 + 3.5, 10, 0.8), cabMat);
-    bb.position.set(0, 9.2, SCREEN.z - 0.6); g.add(bb);
-    const frame = new THREE.Mesh(new THREE.BoxGeometry(SCREEN.w + 1.6, SCREEN.h + 1.6, 0.3), trimMat);
-    frame.position.set(0, SCREEN.y, SCREEN.z - 0.05); g.add(frame);
-    // Top crest
-    const crest = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.2, 0.4, 40, 1, false, 0, Math.PI), trimMat);
-    crest.rotation.x = Math.PI / 2; crest.rotation.z = Math.PI / 2 * 0; crest.position.set(0, SCREEN.y + SCREEN.h / 2 + 0.8, SCREEN.z - 0.1);
-    g.add(crest);
-    // floor under everything (room)
-    const room = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), new THREE.MeshStandardMaterial({ color: theme.bgBottom, roughness: 0.9 }));
-    room.rotation.x = -Math.PI / 2; room.position.y = -4.6; g.add(room);
     this.sideLights.forEach((l, i) => l.color.set(theme.led[i % theme.led.length]));
     this.pusherLedMat.color.set(theme.led[0]);
     this.gateMat.color.set(theme.accent);
@@ -305,6 +239,7 @@ export class Stage {
     this.scene.traverse(o => { if (o.material) { const ms = Array.isArray(o.material) ? o.material : [o.material]; ms.forEach(m => m.needsUpdate = true); } });
     this.camera.fov = s.fov || 42;
     this.useBloom = !!s.bloom;
+    this.usePost = !!s.post;
     this.resize();
   }
 
@@ -316,6 +251,8 @@ export class Stage {
     this.bloom = new UnrealBloomPass(new THREE.Vector2(size.x / 2, size.y / 2), 0.3, 0.4, 0.97);
     this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
+    this.film = new ShaderPass(FILM_SHADER);
+    this.composer.addPass(this.film);
   }
 
   resize() {
@@ -338,7 +275,7 @@ export class Stage {
     const dir = new THREE.Vector3(0, Math.sin(elev), Math.cos(elev));
     const pts = preset.fieldOnly
       ? [[-W - 0.5, 0, L.frontZ + 0.6], [W + 0.5, 0, L.frontZ + 0.6], [-W, L.pusherH, -7], [W, L.pusherH, -7], [0, 0, L.frontZ + 1.2]]
-      : [[-W - 0.8, 0, L.frontZ + 0.7], [W + 0.8, 0, L.frontZ + 0.7], [-W, 0, L.frontZ + 1.4], [-SCREEN.w / 2, SCREEN.y + SCREEN.h / 2 + 0.4, SCREEN.z], [SCREEN.w / 2, SCREEN.y + SCREEN.h / 2 + 0.4, SCREEN.z], [-W - 0.5, L.dropY, L.dropZ], [W + 0.5, L.dropY, L.dropZ]];
+      : [[-W - 0.8, 0, L.frontZ + 0.7], [W + 0.8, 0, L.frontZ + 0.7], [-W, TRAY.y + 0.3, L.frontZ + TRAY.z1 - 0.3], [-SCREEN.w / 2, SCREEN.y + SCREEN.h / 2 + 0.4, SCREEN.z], [SCREEN.w / 2, SCREEN.y + SCREEN.h / 2 + 0.4, SCREEN.z], [-W - 0.5, L.dropY, L.dropZ], [W + 0.5, L.dropY, L.dropZ]];
     const cam = this.camera;
     const v = new THREE.Vector3();
     const fits = d => {
@@ -429,6 +366,22 @@ export class Stage {
       this.bulbMesh.setColorAt(i, c);
     }
     this.bulbMesh.instanceColor.needsUpdate = true;
+    // LED dot strips: chasing pattern, rainbow in fever, strobing on wins
+    if (this.dots) for (const d of this.dots) {
+      const m = d.mesh, cnt = m.userData.n;
+      for (let i = 0; i < cnt; i++) {
+        if (d.red) { c.setRGB(1, 0.08, 0.1).multiplyScalar(0.4 + 0.6 * Math.max(0, Math.sin(i * 0.9 - t * 5))); }
+        else if (!leds) c.set(th.led[0]).multiplyScalar(0.8);
+        else if (mode === 'fever') c.setHSL((i / cnt * 2 + t * 0.9 + d.phase) % 1, 1, 0.6);
+        else if (mode === 'win') c.set(th.led[(Math.floor(t * 12) + i) % th.led.length]);
+        else if (mode === 'spin') c.set(th.led[1 % th.led.length]).multiplyScalar(((i + Math.floor(t * 24)) % 5 === 0) ? 1.4 : 0.25);
+        else { const w = Math.max(0, Math.sin(i * 0.35 - t * 4 + d.phase * 6)); c.set(th.led[i % 3 === 0 ? 1 % th.led.length : 0]).multiplyScalar(0.25 + 0.95 * w * w); }
+        m.setColorAt(i, c);
+      }
+      m.instanceColor.needsUpdate = true;
+    }
+    if (this.room) this.room.update(t);
+    if (this.marqueeMat) this.marqueeMat.emissiveIntensity = mode === 'fever' || mode === 'win' ? 1.1 + Math.sin(t * 12) * 0.4 : 1.0 + Math.sin(t * 1.5) * 0.1;
     for (let i = 0; i < 2; i++) this.sideLights[i].intensity = mode === 'fever' ? 22 + Math.sin(t * 10 + i * 3) * 12 : 8;
     this.frontLight.intensity = Math.max(0, this.frontLight.intensity - dt * 120);
     if (st.payoutFlash) this.frontLight.intensity = Math.min(80, this.frontLight.intensity + st.payoutFlash * 25);
@@ -444,30 +397,33 @@ export class Stage {
   }
 
   render() {
-    if (this.useBloom) { this._composer(); this.composer.render(); }
-    else this.renderer.render(this.scene, this.camera);
+    if (this.useBloom || this.usePost) {
+      this._composer();
+      this.bloom.enabled = this.useBloom;
+      this.film.enabled = this.usePost;
+      this.film.uniforms.time.value = this.time % 100;
+      this.composer.render();
+    } else this.renderer.render(this.scene, this.camera);
   }
 }
 
-// Dark studio with soft-box lights: gives metals contrasty, realistic reflections
-function makeEnvScene(theme) {
-  const sc = new THREE.Scene();
-  const room = new THREE.Mesh(new THREE.BoxGeometry(60, 30, 60), new THREE.MeshBasicMaterial({ color: new THREE.Color(theme.bgTop).lerp(new THREE.Color('#3a3a44'), 0.6), side: THREE.BackSide }));
-  room.position.y = 10; sc.add(room);
-  const box = (w, h, x, y, z, color, k, lookY = 0) => {
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(k), side: THREE.DoubleSide }));
-    m.position.set(x, y, z); m.lookAt(0, lookY, 0); sc.add(m);
-  };
-  box(34, 12, 0, 22, 2, '#ffffff', 2);          // ceiling softbox
-  box(20, 6, 0, 18, -14, '#ffffff', 1.6);       // back-top softbox
-  box(10, 4, -14, 14, 14, theme.light, 2);      // key softboxes
-  box(10, 4, 14, 14, 14, theme.light, 2);
-  box(4, 18, -26, 8, -6, theme.led[0], 2.2);    // colored side strips
-  box(4, 18, 26, 8, -6, theme.led[1 % theme.led.length], 2.2);
-  box(40, 8, 0, 8, 28, '#ffffff', 1.0);         // front fill
-  box(30, 6, 0, 4, -28, theme.accent, 0.8);     // back glow
-  return sc;
-}
+// Camera-like finish (display space): soft vignette, fine grain and a gentle contrast curve
+const FILM_SHADER = {
+  uniforms: { tDiffuse: { value: null }, time: { value: 0 } },
+  vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+  fragmentShader: `
+    uniform sampler2D tDiffuse; uniform float time; varying vec2 vUv;
+    float h(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233)) + time * 7.0) * 43758.5453); }
+    void main(){
+      vec4 c = texture2D(tDiffuse, vUv);
+      vec2 d = vUv - 0.5;
+      float v = smoothstep(0.95, 0.25, length(d * vec2(1.15, 1.0)));
+      c.rgb *= mix(0.62, 1.0, v);
+      c.rgb = mix(c.rgb, c.rgb * c.rgb * (3.0 - 2.0 * c.rgb), 0.22);
+      c.rgb += (h(gl_FragCoord.xy) - 0.5) * 0.028;
+      gl_FragColor = c;
+    }`,
+};
 
 function makeGradientBg(top, bottom) {
   const c = document.createElement('canvas'); c.width = 4; c.height = 256;

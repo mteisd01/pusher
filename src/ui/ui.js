@@ -235,11 +235,12 @@ export class UI {
   nextHint() { this.hintIdx++; this.game.save.tutorial = this.hintIdx; this.showHint(); }
 
   // ---------- dialogs ----------
-  confirm(text, onYes) {
-    this.dialog.innerHTML = `<div class="dbox"><p>${esc(text)}</p><div class="row"><button class="btn" id="dNo">${t('cancel')}</button><button class="btn primary" id="dYes">${t('ok')}</button></div></div>`;
+  confirm(text, onYes, check) {
+    const chk = check ? `<label class="dcheck"><input type="checkbox" id="dChk" ${check.checked ? 'checked' : ''}> ${esc(check.label)}</label>` : '';
+    this.dialog.innerHTML = `<div class="dbox"><p>${esc(text)}</p>${chk}<div class="row"><button class="btn" id="dNo">${t('cancel')}</button><button class="btn primary" id="dYes">${t('ok')}</button></div></div>`;
     this.dialog.classList.remove('hidden');
     $('#dNo', this.dialog).onclick = () => this.dialog.classList.add('hidden');
-    $('#dYes', this.dialog).onclick = () => { this.dialog.classList.add('hidden'); onYes(); };
+    $('#dYes', this.dialog).onclick = () => { const c = $('#dChk', this.dialog); this.dialog.classList.add('hidden'); onYes(c ? c.checked : undefined); };
   }
   showLogin(lb, onClaim) {
     const days = [1, 2, 3, 4, 5, 6, 7].map(d => `<div class="lday ${d < lb.day ? 'past' : d === lb.day ? 'now' : ''}"><small>${t('loginDay', d)}</small>${d === 7 ? '💎' : '🪙'}</div>`).join('');
@@ -377,7 +378,7 @@ export class UI {
         ['fov', 'range', 30, 70, 1],
         ['resScale', 'range', 0.5, 1.5, 0.05],
         ['shadows', 'toggle'], ['shadowRes', 'select', [[1024, '1024'], [2048, '2048'], [4096, '4096']]],
-        ['bloom', 'toggle'], ['reflections', 'toggle'], ['particles', 'range', 0, 2, 0.1],
+        ['bloom', 'toggle'], ['post', 'toggle'], ['roomDetail', 'select', [['full', getLang() === 'ja' ? '高（店内フル）' : 'Full'], ['simple', getLang() === 'ja' ? '標準' : 'Simple'], ['off', getLang() === 'ja' ? 'オフ（単色背景）' : 'Off']]], ['reflections', 'toggle'], ['particles', 'range', 0, 2, 0.1],
         ['coinDetail', 'select', ['low', 'medium', 'high', 'ultra'].map(v => [v, t('q_' + v)])],
         ['maxFps', 'select', [[0, getLang() === 'ja' ? '無制限' : 'Unlimited'], [30, '30'], [60, '60']]],
         ['coinReflect', 'range', 0.3, 1.5, 0.05], ['showFps', 'toggle'], ['shake', 'toggle'], ['leds', 'toggle'], ['antialias', 'toggle'],
@@ -455,7 +456,8 @@ export class UI {
         <button class="btn" id="dBackup">${t('restoreBackup')}</button>
         <button class="btn warn" id="dResetBoard">${t('resetBoard')}</button>
         <button class="btn danger" id="dReset">${t('resetAll')}</button>
-      </div>`;
+      </div>
+      <div class="dnote">${t('resetBoardNote')}</div>`;
     const code = $('#dCode', body);
     const gen = async () => { code.value = '…'; code.value = await this.o.onExport($('#dBoard', body).checked); };
     gen();
@@ -490,7 +492,7 @@ export class UI {
     };
     $('#dBackup', body).onclick = () => { const b = readBackup(); if (!b) { this.toast('⚠', '-'); return; } this.confirm(`${t('restoreBackup')} (${new Date(b.at).toLocaleString()})`, () => this.o.onRestoreBackup(b)); };
     $('#dResetBoard', body).onclick = () => this.confirm(t('resetBoardConfirm'), () => this.o.onResetBoard());
-    $('#dReset', body).onclick = () => this.confirm(t('resetConfirm'), () => this.o.onResetAll());
+    $('#dReset', body).onclick = () => this.confirm(t('resetConfirm'), keep => this.o.onResetAll(keep), { label: t('keepSettings'), checked: true });
   }
 }
 

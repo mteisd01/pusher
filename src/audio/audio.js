@@ -205,7 +205,7 @@ export class AudioSys {
   pileMotion(v, dt) {
     if (!this.ctx || this.vol.se <= 0) return;
     this.motion += (v - this.motion) * Math.min(1, dt * 6);
-    const rate = Math.min(70, this.motion * 0.09);           // grains per second
+    const rate = Math.min(70, Math.max(0, this.motion - 12) * 0.2); // grains per second (idle pile ≈ 10 → silent)
     this._grainAcc = (this._grainAcc || 0) + rate * dt;
     while (this._grainAcc >= 1) {
       this._grainAcc -= 1;

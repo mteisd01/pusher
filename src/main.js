@@ -1,5 +1,6 @@
 import './ui/style.css';
 import { Stage, CAMERA_PRESETS } from './render/scene.js';
+import { TRAY } from './render/cabinet.js';
 import { CoinRenderer } from './render/coins.js';
 import { Backboard } from './render/backboard.js';
 import { Effects } from './render/effects.js';
@@ -45,6 +46,8 @@ async function boot() {
   setLoad(t('loading'), 0.25);
   await nextFrame();
   const coins = new CoinRenderer(stage.scene, s.coinDetail);
+  coins.trayDef = { y: TRAY.y, z0: L.frontZ + TRAY.z0, z1: L.frontZ + TRAY.z1, hw: L.halfW };
+  coins.onTrayEmptied = () => audio.payout(10, 0, true);
   const backboard = new Backboard();
   stage.addScreen(backboard.texture);
   const effects = new Effects(stage.scene);
@@ -63,12 +66,21 @@ async function boot() {
 
   const uiRoot = document.getElementById('ui');
   let game;
+  let unloading = false;
   const ui = new UI(uiRoot, {
     onSettings: key => applySetting(key),
     onExport: async withBoard => exportCode(save, withBoard ? await physics.snapshot() : null),
     onImport: code => doImport(code),
-    onResetBoard: () => { physics.cmd('clear'); physics.cmd('prefill', s.prefill); clearBoard(); ui.close(); },
-    onResetAll: () => { wipeAll(); location.reload(); },
+    onResetBoard: () => {
+      clearBoard(s.tableSize);
+      const baked = BAKED[`./data/board_${s.tableSize}.txt`];
+      let snap = null;
+      if (baked) { try { snap = decodeBoard(baked.trim()); } catch (e) { snap = null; } }
+      physics.cmd('clear');
+      if (snap) physics.cmd('restore', snap); else physics.cmd('prefill', s.prefill);
+      ui.close();
+    },
+    onResetAll: keepSettings => { unloading = true; wipeAll(keepSettings ? save.settings : null); location.reload(); },
     onRestoreBackup: b => { replaceSave(b.save, b.board); },
     onCycleCamera: () => { const keys = Object.keys(CAMERA_PRESETS); s.camera = keys[(keys.indexOf(s.camera) + 1) % keys.length]; stage.userZoom = 0; stage.fitCamera(); },
     onFullscreen: () => toggleFullscreen(),
@@ -107,6 +119,7 @@ async function boot() {
         Object.assign(st, QUALITY_PRESETS[st.quality === 'auto' ? detectQuality() : st.quality]);
         coins.build(st.coinDetail); coins.setReflection(st.coinReflect);
         coins.setShadows(!!st.shadows, st.coinDetail === 'high' || st.coinDetail === 'ultra');
+        stage.setTheme(themeById(st.theme));
         stage.applyQuality(st); effects.amount = st.particles;
         physics.cmd('hz', st.physHz);
         break;
@@ -114,7 +127,8 @@ async function boot() {
       case 'pauseOnMenu': game.setPause('menu', !!st.pauseOnMenu && ui.isOpen()); break;
       case 'ambience': audio.setVolume({ ambience: st.ambience }); break;
       case 'coinDetail': coins.build(st.coinDetail); coins.setReflection(st.coinReflect); coins.setShadows(!!st.shadows, st.coinDetail === 'high' || st.coinDetail === 'ultra'); break;
-      case 'resScale': case 'shadows': case 'shadowRes': case 'bloom': case 'reflections': case 'fov': case 'camera':
+      case 'roomDetail': stage.setTheme(themeById(st.theme)); stage.applyQuality(st); break;
+      case 'post': case 'resScale': case 'shadows': case 'shadowRes': case 'bloom': case 'reflections': case 'fov': case 'camera':
         stage.applyQuality(st); coins.setShadows(!!st.shadows, st.coinDetail === 'high' || st.coinDetail === 'ultra'); break;
       case 'particles': effects.amount = st.particles; break;
       case 'physHz': physics.cmd('hz', st.physHz); break;
@@ -122,7 +136,7 @@ async function boot() {
       case 'theme': { const th = themeById(st.theme); stage.setTheme(th); audio.setStyle(th.bgm); break; }
       case 'leftHand': case 'highContrast': case 'reduceMotion': case 'uiScale': case 'dropButton': case 'showFps': ui.applyLayout(); break;
       case 'f_missions': game.prog.ensureMissions(); break;
-      case 'tableSize': persist(); storeSave(save); location.reload(); return;
+      case 'tableSize': persist(); unloading = true; location.reload(); return;
       case 'antialias': case 'worker': break;
     }
     persist();
@@ -136,6 +150,7 @@ async function boot() {
   }
   async function replaceSave(newS, newBoard) {
     backup(save);
+    unloading = true;
     storeSave(newS);
     const size = newS.settings.tableSize || 'wide';
     if (newBoard) storeBoard(newBoard, size); else clearBoard(size);
@@ -144,9 +159,11 @@ async function boot() {
   }
 
   // ---------- persistence ----------
+  // `unloading` blocks every write once a reset/import has replaced the stored data,
+  // otherwise pagehide/visibilitychange would write the old in-memory save back.
   let lastSave = 0, lastBoard = 0;
-  function persist() { storeSave(save); lastSave = performance.now(); }
-  async function persistBoard() { const snap = await physics.snapshot(); storeBoard(snap, s.tableSize); lastBoard = performance.now(); }
+  function persist() { if (unloading) return; storeSave(save); lastSave = performance.now(); }
+  async function persistBoard() { if (unloading) return; const snap = await physics.snapshot(); if (!unloading) storeBoard(snap, s.tableSize); lastBoard = performance.now(); }
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) { persist(); persistBoard(); if (s.muteHidden) audio.setMuted(true); game.setPause('hidden', true); }
     else { audio.setMuted(muted); game.setPause('hidden', false); last = performance.now(); }
@@ -276,6 +293,7 @@ async function boot() {
       fever: game.fx.fever > 0, effects: game.fx, combo: game.combo, theme: game.theme(), event: game.features.event,
     });
     if (!paused) effects.update(dt);
+    coins.updateTray(paused ? 0 : dt);
     stage.render();
     ui.update(dt, { fps });
     if (now - lastSave > 15000) persist();

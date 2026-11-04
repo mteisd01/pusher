@@ -222,6 +222,7 @@ export class Game {
         }
         this.prog.addXp(e.kind === KIND.SILVER ? 0 : Math.ceil(v / 5));
         this.strokeCoins += 1;
+        this.coins.addTray(e.kind, e.x);
         this._pop(v, e.x, e.kind);
         this.audio.payout(e.kind === KIND.SILVER ? 1 : 3, e.x / L.halfW * 0.8, e.kind === KIND.BIG || e.kind === KIND.GIANT);
         const col = e.kind === KIND.GOLD ? '#ffcc33' : e.kind === KIND.RAINBOW ? `hsl(${Math.random() * 360},100%,60%)` : e.kind === KIND.BIG ? '#ffd34d' : '#e8f0ff';

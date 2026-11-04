@@ -17,6 +17,7 @@ export const TOKEN_STYLE = [
 ];
 export const GEM_COLORS = ['#ff1744', '#2979ff', '#00e676', '#ffc400', '#d500f9', '#e8f6ff'];
 
+const TRAY_CAP = 240;
 const CAP = { [KIND.SILVER]: 1400, [KIND.GOLD]: 500, [KIND.RAINBOW]: 120, [KIND.BIG]: 60, [KIND.BALL]: 16, [KIND.GEM]: 60, [KIND.CHEST]: 30, [KIND.GIANT]: 6 };
 
 export class CoinRenderer {
@@ -29,6 +30,7 @@ export class CoinRenderer {
 
   build(quality) {
     for (const m of Object.values(this.meshes)) { this.scene.remove(m); }
+    for (const m of this.trayMeshes || []) this.scene.remove(m);
     for (const m of this.tokenMeshes) this.scene.remove(m);
     this.meshes = {}; this.tokenMeshes = [];
     const hi = quality === 'high' || quality === 'ultra';
@@ -86,6 +88,61 @@ export class CoinRenderer {
     const chestMat = new THREE.MeshStandardMaterial({ map: chestTex, metalness: 0.25, roughness: 0.55 });
     this._inst(KIND.CHEST, new THREE.BoxGeometry(1.1, 0.8, 0.8), chestMat, true);
     this.gemColors = GEM_COLORS.map(c => new THREE.Color(c));
+    // payout tray: won medals pile up in front of the player (visual only)
+    this.trayMeshes = [silverMats, goldMats].map(mats => {
+      const m = new THREE.InstancedMesh(coinGeo, mats, TRAY_CAP);
+      m.count = 0; m.frustumCulled = false; m.receiveShadow = true;
+      this.scene.add(m); return m;
+    });
+    for (const m of this.trayMeshes) m.userData.tray = true;
+    this.tray = this.tray || [];
+    this.trayDirty = true;
+  }
+
+  // a medal landed in the payout tray (kind: 0 silver, anything else golden)
+  addTray(kind, x) {
+    if (!this.trayMeshes) return;
+    const T = this.trayDef;
+    if (!T) return;
+    const tr = this.tray;
+    if (this.trayClear > 0) return;
+    const n = kind === KIND.SILVER ? 1 : Math.min(4, kind === KIND.GOLD ? 1 : 3);
+    for (let k = 0; k < n; k++) {
+      const px = Math.max(-T.hw, Math.min(T.hw, x + (Math.random() - 0.5) * 1.6));
+      const pz = T.z0 + 0.35 + Math.random() * (T.z1 - T.z0 - 0.7);
+      // stack on top of nearby medals
+      let h = 0;
+      for (const c of tr) if (Math.abs(c.x - px) < 0.75 && Math.abs(c.z - pz) < 0.75) h = Math.max(h, c.h + 1);
+      h = Math.min(h, 4);
+      const a = Math.random() * Math.PI * 2, tilt = (Math.random() - 0.5) * (h ? 0.35 : 0.12);
+      tr.push({ x: px, z: pz, h, g: kind === KIND.SILVER ? 0 : 1, a, tilt, drop: 0.35 });
+    }
+    if (tr.length > TRAY_CAP - 20) this.trayClear = 1; // tray full: it gets emptied
+    this.trayDirty = true;
+  }
+
+  updateTray(dt) {
+    if (!this.trayMeshes || !this.trayDef) return;
+    const T = this.trayDef, tr = this.tray;
+    let anim = false;
+    for (const c of tr) if (c.drop > 0) { c.drop = Math.max(0, c.drop - dt * 2.2); anim = true; }
+    if (this.trayClear > 0) {
+      this.trayClear -= dt * 1.25; anim = true;
+      if (this.trayClear <= 0) { tr.length = 0; this.trayClear = 0; if (this.onTrayEmptied) this.onTrayEmptied(); }
+    }
+    if (!anim && !this.trayDirty) return;
+    this.trayDirty = false;
+    const sink = this.trayClear > 0 ? (1 - this.trayClear) : 0;
+    const q = new THREE.Quaternion(), e = new THREE.Euler(), mtx = new THREE.Matrix4(), p = new THREE.Vector3(), sc = new THREE.Vector3(1, 1, 1);
+    const cnt = [0, 0];
+    for (const c of tr) {
+      const m = this.trayMeshes[c.g];
+      e.set(c.tilt, c.a, c.tilt * 0.6); q.setFromEuler(e);
+      p.set(c.x, T.y + L.coinHH + c.h * L.coinHH * 1.9 + c.drop * c.drop * 6 - sink * 1.2, c.z + sink * 0.8);
+      mtx.compose(p, q, sc);
+      m.setMatrixAt(cnt[c.g]++, mtx);
+    }
+    this.trayMeshes.forEach((m, i) => { m.count = cnt[i]; m.instanceMatrix.needsUpdate = true; });
   }
 
   // user-adjustable reflection strength (1 = default)
@@ -114,8 +171,26 @@ export class CoinRenderer {
   }
 
   // buf layout from PusherPhysics.pack
+  // Render-side dead band: tiny residual solver jitter of resting coins is not shown.
+  // A coin keeps its last drawn pose until it has moved/rotated by a visible amount.
+  _stable(buf, off) {
+    const id = buf[off];
+    let p = this.poses.get(id);
+    if (!p) { p = new Float32Array(8); this.poses.set(id, p); p[7] = -1; }
+    const x = buf[off + 3], y = buf[off + 4], z = buf[off + 5];
+    const dot = Math.abs(p[3] * buf[off + 6] + p[4] * buf[off + 7] + p[5] * buf[off + 8] + p[6] * buf[off + 9]);
+    if (p[7] < 0 || Math.abs(x - p[0]) + Math.abs(y - p[1]) + Math.abs(z - p[2]) > 0.006 || dot < 0.99997) {
+      for (let k = 0; k < 7; k++) p[k] = buf[off + 3 + k];
+    }
+    p[7] = this.gen;
+    return p;
+  }
+
   update(buf) {
     const n = buf[0] | 0;
+    if (!this.poses) { this.poses = new Map(); this.gen = 0; }
+    this.gen++;
+    if (this.gen % 300 === 0) for (const [id, p] of this.poses) if (this.gen - p[7] > 5) this.poses.delete(id);
     const counts = {};
     const tcounts = new Array(TOKEN_COUNT).fill(0);
     for (const k in this.meshes) counts[k] = 0;
@@ -132,7 +207,8 @@ export class CoinRenderer {
         idx = counts[kind]++;
       }
       if (idx >= mesh.instanceMatrix.count) continue;
-      compose(mesh.instanceMatrix.array, idx * 16, buf[off + 3], buf[off + 4], buf[off + 5], buf[off + 6], buf[off + 7], buf[off + 8], buf[off + 9]);
+      const p = this._stable(buf, off);
+      compose(mesh.instanceMatrix.array, idx * 16, p[0], p[1], p[2], p[3], p[4], p[5], p[6]);
       if (kind === KIND.GEM) mesh.setColorAt(idx, this.gemColors[Math.floor(extra / 4) % this.gemColors.length]);
     }
     for (const k in this.meshes) {

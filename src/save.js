@@ -9,7 +9,7 @@ export const DEFAULT_SETTINGS = {
   lang: 'auto',
   quality: 'auto', resScale: 1, shadows: true, shadowRes: 2048, bloom: true, reflections: true, particles: 1, maxFps: 0, showFps: false,
   tableSize: 'wide', coinDetail: 'high', camera: 'standard', fov: 42, shake: true, leds: true, antialias: true, theme: 'casino',
-  coinReflect: 1, physHz: 60, maxObjects: 900, prefill: 520, worker: true, pauseOnMenu: true, ambience: 0.25,
+  coinReflect: 1, post: true, roomDetail: 'full', physHz: 60, maxObjects: 900, prefill: 520, worker: true, pauseOnMenu: true, ambience: 0.25,
   master: 0.8, bgm: 0.45, se: 0.8, muteHidden: true,
   autoDrop: false, autoMode: 'follow', holdRepeat: true, vibrate: true, leftHand: false, uiScale: 1, dropButton: true, showBeam: true,
   f_slot: true, f_jp: true, f_items: true, f_fever: true, f_walls: true, f_combo: true, f_missions: true, f_achievePopups: true,
@@ -19,10 +19,10 @@ export const DEFAULT_SETTINGS = {
 };
 
 export const QUALITY_PRESETS = {
-  low: { resScale: 0.7, shadows: false, shadowRes: 1024, bloom: false, reflections: true, particles: 0.4, coinDetail: 'low', maxObjects: 750, physHz: 60, antialias: false },
-  medium: { resScale: 0.85, shadows: true, shadowRes: 1024, bloom: false, reflections: true, particles: 0.7, coinDetail: 'medium', maxObjects: 850, physHz: 60 },
-  high: { resScale: 1, shadows: true, shadowRes: 2048, bloom: true, reflections: true, particles: 1, coinDetail: 'high', maxObjects: 1000, physHz: 60 },
-  ultra: { resScale: 1, shadows: true, shadowRes: 4096, bloom: true, reflections: true, particles: 1.4, coinDetail: 'ultra', maxObjects: 1400, physHz: 60 },
+  low: { post: false, roomDetail: 'simple', resScale: 0.7, shadows: false, shadowRes: 1024, bloom: false, reflections: true, particles: 0.4, coinDetail: 'low', maxObjects: 750, physHz: 60, antialias: false },
+  medium: { post: true, roomDetail: 'simple', resScale: 0.85, shadows: true, shadowRes: 1024, bloom: false, reflections: true, particles: 0.7, coinDetail: 'medium', maxObjects: 850, physHz: 60 },
+  high: { post: true, roomDetail: 'full', resScale: 1, shadows: true, shadowRes: 2048, bloom: true, reflections: true, particles: 1, coinDetail: 'high', maxObjects: 1000, physHz: 60 },
+  ultra: { post: true, roomDetail: 'full', resScale: 1, shadows: true, shadowRes: 4096, bloom: true, reflections: true, particles: 1.4, coinDetail: 'ultra', maxObjects: 1400, physHz: 60 },
 };
 
 export function detectQuality() {
@@ -184,6 +184,9 @@ export function backup(save) {
 export function readBackup() {
   try { const r = localStorage.getItem(BACKUP_KEY); if (!r) return null; const o = JSON.parse(r); return { save: sanitize(o.save), board: o.board ? decodeBoard(o.board) : null, at: o.at }; } catch (e) { return null; }
 }
-export function wipeAll() {
-  try { for (const k of Object.keys(localStorage)) if (k.startsWith('pusher.') && k !== BACKUP_KEY) localStorage.removeItem(k); } catch (e) {}
+export function wipeAll(keepSettings) {
+  try {
+    for (const k of Object.keys(localStorage)) if (k.startsWith('pusher.') && k !== BACKUP_KEY) localStorage.removeItem(k);
+    if (keepSettings) { const n = newSave(); n.settings = { ...DEFAULT_SETTINGS, ...keepSettings }; n._qualityApplied = true; localStorage.setItem(KEY, JSON.stringify(n)); }
+  } catch (e) {}
 }
