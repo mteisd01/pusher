@@ -35,9 +35,9 @@ export const B = {
     expert: { slot: 0.55, gate: 0.7, item: 0.6, outZone: 1.1, upgCost: 1.3, xp: 1.25, jp: 1.2, gem: 1.35, walls: 0.8, regen: 0.8, rocks: null,
       bossHp: 1.15, bossTime: 70, bossAtk: 0.7, bossReward: 1.45, bossMix: 1, bossEnrage: true, bossRegen: false, bossBarrier: false, color: '#ffd34d', badge: '達' },
     shura: { slot: 0.47, gate: 0.62, item: 0.5, outZone: 1.8, upgCost: 1.5, xp: 1.45, jp: 1.35, gem: 1.6, walls: 0.7, regen: 0.5, rocks: [180, 300],
-      bossHp: 1.0, bossTime: 66, bossAtk: 0.6, bossReward: 1.75, bossMix: 1, bossEnrage: true, bossRegen: true, bossBarrier: false, color: '#ff2d55', badge: '修' },
+      bossHp: 0.9, bossTime: 66, bossAtk: 0.6, bossReward: 1.75, bossMix: 1, bossEnrage: true, bossRegen: true, bossBarrier: false, color: '#ff2d55', badge: '修' },
     inferno: { slot: 0.4, gate: 0.55, item: 0.42, outZone: 2.7, upgCost: 1.75, xp: 1.7, jp: 1.5, gem: 2.0, walls: 0.6, regen: 0.5, rocks: [120, 220],
-      bossHp: 0.85, bossTime: 62, bossAtk: 0.5, bossReward: 2.1, bossMix: 2, bossEnrage: true, bossRegen: true, bossBarrier: true, color: '#d500f9', badge: '獄' },
+      bossHp: 0.95, bossTime: 62, bossAtk: 0.5, bossReward: 2.1, bossMix: 2, bossEnrage: true, bossRegen: true, bossBarrier: true, color: '#d500f9', badge: '獄' },
   },
   maxShowerPhysical: 120,
 };
