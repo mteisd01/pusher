@@ -330,7 +330,7 @@ async function boot() {
     if (!paused) {
       tower.update(dt);
       bossView.update(dt);
-      M_outZone(machines.field, game.diff.outZone || 0);
+      M_outZone(machines.field, game.outSent || 0);
       const M = machines;
       M.reels.group.visible = !!(s.f_mechReels && s.f_slot);
       if (M.reels.group.visible) M.reels.update(dt, game.slot, { fever: game.fx.fever > 0 });

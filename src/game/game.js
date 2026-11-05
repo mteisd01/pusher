@@ -562,7 +562,7 @@ export class Game {
     if (walls !== this.wallsSent) { this.physics.cmd('walls', walls); this.wallsSent = walls; }
     const speed = (this.fx.turbo > 0 ? B.turbo.speed : 1) * (this.fx.fever > 0 ? 1.15 : 1) * this.features.speedMult() * this.boss.speedMult();
     if (speed !== this.speedSent) { this.physics.cmd('speed', speed); this.speedSent = speed; }
-    const oz = this.diff.outZone || 0;
+    const oz = +((this.diff.outZone || 0) * L.halfW / 11).toFixed(2);   // same share of the front edge on every table size
     if (oz !== this.outSent) { this.physics.cmd('outZone', oz); this.outSent = oz; }
     const mag = this.fx.magnet > 0;
     if (mag !== this.magSent) { this.physics.cmd('magnet', mag); this.magSent = mag; }
