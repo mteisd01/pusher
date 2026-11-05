@@ -30,14 +30,14 @@ export const B = {
       bossHp: 0.6, bossTime: 90, bossAtk: 1.3, bossReward: 0.8, bossMix: 0, bossEnrage: false, bossRegen: false, bossBarrier: false, color: '#7CFFB2', badge: '' },
     normal: { slot: 0.8, gate: 1, item: 1, outZone: 0, upgCost: 1, xp: 1, jp: 1, gem: 1, walls: 1, regen: 1, rocks: null,
       bossHp: 1, bossTime: 75, bossAtk: 1, bossReward: 1, bossMix: 0, bossEnrage: false, bossRegen: false, bossBarrier: false, color: '#ffffff', badge: '' },
-    hard: { slot: 0.65, gate: 0.8, item: 0.7, outZone: 0.5, upgCost: 1.15, xp: 1.1, jp: 1.1, gem: 1.15, walls: 0.9, regen: 1, rocks: null,
+    hard: { slot: 0.65, gate: 0.8, item: 0.7, outZone: 0.8, upgCost: 1.15, xp: 1.1, jp: 1.1, gem: 1.15, walls: 0.9, regen: 1, rocks: null,
       bossHp: 1.1, bossTime: 72, bossAtk: 0.85, bossReward: 1.2, bossMix: 0, bossEnrage: false, bossRegen: false, bossBarrier: false, color: '#ff9e1b', badge: '' },
-    expert: { slot: 0.55, gate: 0.7, item: 0.6, outZone: 0.9, upgCost: 1.3, xp: 1.25, jp: 1.2, gem: 1.35, walls: 0.8, regen: 0.8, rocks: null,
+    expert: { slot: 0.55, gate: 0.7, item: 0.6, outZone: 1.1, upgCost: 1.3, xp: 1.25, jp: 1.2, gem: 1.35, walls: 0.8, regen: 0.8, rocks: null,
       bossHp: 1.15, bossTime: 70, bossAtk: 0.7, bossReward: 1.45, bossMix: 1, bossEnrage: true, bossRegen: false, bossBarrier: false, color: '#ffd34d', badge: '達' },
-    shura: { slot: 0.47, gate: 0.62, item: 0.5, outZone: 1.3, upgCost: 1.5, xp: 1.45, jp: 1.35, gem: 1.6, walls: 0.7, regen: 0.5, rocks: [180, 300],
-      bossHp: 1.2, bossTime: 66, bossAtk: 0.6, bossReward: 1.75, bossMix: 1, bossEnrage: true, bossRegen: true, bossBarrier: false, color: '#ff2d55', badge: '修' },
-    inferno: { slot: 0.4, gate: 0.55, item: 0.42, outZone: 2.0, upgCost: 1.75, xp: 1.7, jp: 1.5, gem: 2.0, walls: 0.6, regen: 0.5, rocks: [120, 220],
-      bossHp: 1.2, bossTime: 62, bossAtk: 0.5, bossReward: 2.1, bossMix: 2, bossEnrage: true, bossRegen: true, bossBarrier: true, color: '#d500f9', badge: '獄' },
+    shura: { slot: 0.47, gate: 0.62, item: 0.5, outZone: 1.5, upgCost: 1.5, xp: 1.45, jp: 1.35, gem: 1.6, walls: 0.7, regen: 0.5, rocks: [180, 300],
+      bossHp: 1.1, bossTime: 66, bossAtk: 0.6, bossReward: 1.75, bossMix: 1, bossEnrage: true, bossRegen: true, bossBarrier: false, color: '#ff2d55', badge: '修' },
+    inferno: { slot: 0.4, gate: 0.55, item: 0.42, outZone: 2.4, upgCost: 1.75, xp: 1.7, jp: 1.5, gem: 2.0, walls: 0.6, regen: 0.5, rocks: [120, 220],
+      bossHp: 1.0, bossTime: 62, bossAtk: 0.5, bossReward: 2.1, bossMix: 2, bossEnrage: true, bossRegen: true, bossBarrier: true, color: '#d500f9', badge: '獄' },
   },
   maxShowerPhysical: 120,
 };
@@ -51,9 +51,9 @@ export const ROCK_REWARD = 3;
 // HP = hp * hpGrow^(stage-1) * difficulty.bossHp; reward = (reward + rewardPerStage*(stage-1)) * bossReward
 export const BOSS = {
   gaugeNeed: 1800, gaugePerGate: 3, gaugeRoad: 0.3, introMs: 3000,
-  hp: 300, hpGrow: 1.16, reward: 70, rewardPerStage: 15, ballChance: 0.25,
+  hp: 300, hpGrow: 1.16, reward: 55, rewardPerStage: 12, ballChance: 0.25,
   firstAttack: 8, attackEvery: 14, weakEvery: 16, weakDur: 4, critMult: 5,
-  barrierEvery: 22, barrierDur: 4, regenAfter: 5, regenRate: 0.012,
+  barrierEvery: 22, barrierDur: 4, regenAfter: 5, regenRate: 0.006,
   jamDur: 7, freezeDur: 6, freezeSpeed: 0.5, drain: [2, 6],
   retryGauge: 0.5, consolation: 0.3,
   // damage per action
