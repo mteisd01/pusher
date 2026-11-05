@@ -1,5 +1,5 @@
-// Smoke test for v5: difficulty tiers (worker layout, falling rocks, settings note, reload on
-// gutter change) and boss battles. node tools/e2e5.mjs [url] [outdir]   ONLY=diff,boss
+// Smoke test for v5: difficulty tiers (worker layout, falling rocks, settings note, OUT zones)
+// and boss battles. node tools/e2e5.mjs [url] [outdir]   ONLY=diff,boss
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 let pw; try { pw = require('playwright'); } catch (e) { pw = require(require('child_process').execSync('npm root -g').toString().trim() + '/playwright'); }
@@ -31,11 +31,13 @@ if (only.includes('diff')) {
   await p.waitForTimeout(500);
   await ev(() => document.querySelector('[data-k="difficulty"]').scrollIntoView());
   await p.waitForTimeout(300); await shot('settings');
-  // switching to a tier with another gutter length reloads the table
+  // switching applies at once (OUT zones are a runtime physics setting)
   await ev(() => { const s = document.querySelector('[data-k="difficulty"]'); s.value = 'inferno'; s.dispatchEvent(new Event('change')); });
-  await p.waitForFunction(() => window.__game && __game.settings.difficulty === 'inferno', null, { timeout: 120000 });
+  await p.waitForTimeout(300); await shot('settings_inferno');
+  await ev(() => __game.ui.close());
   await p.waitForTimeout(2000);
-  console.log('after reload', await ev(() => __game.settings.difficulty), 'regenCap', await ev(() => __game.regenCap()), 'badge', await ev(() => document.querySelector('#hDiff').textContent));
+  console.log('outZone sent', await ev(() => __game.outSent));
+  console.log('after switch', await ev(() => __game.settings.difficulty), 'regenCap', await ev(() => __game.regenCap()), 'badge', await ev(() => document.querySelector('#hDiff').textContent));
   await shot('inferno');
 }
 if (only.includes('boss')) {

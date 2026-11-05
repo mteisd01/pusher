@@ -3,6 +3,7 @@
 // tube next to the lucky wheel (caught medals ride a chute into it).
 import * as THREE from 'three';
 import { L, TURNTABLE, FLIPPER } from '../core/layout.js';
+import { TRAY } from './cabinet.js';
 
 const TAU = Math.PI * 2;
 
@@ -116,12 +117,13 @@ export class FieldDevices {
     }
     this.outG = new THREE.Group();
     for (const sx of [-1, 1]) {
-      // on the front face of the field edge (the field itself is covered by medals) ...
-      const m = new THREE.Mesh(new THREE.PlaneGeometry(w, 0.5), this.outMat);
-      m.position.set(sx * (this.W - w / 2), -0.3, L.frontZ + 0.03);
+      // hazard floor in the payout tray below the corners (the field itself is covered by medals) ...
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(w, TRAY.z1 - TRAY.z0), this.outMat);
+      m.rotation.x = -Math.PI / 2;
+      m.position.set(sx * (this.W - w / 2), TRAY.y + 0.03, L.frontZ + (TRAY.z0 + TRAY.z1) / 2);
       // ... plus a glowing boundary post at the inner end of the zone
-      const post = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.9, 0.06), new THREE.MeshBasicMaterial({ color: 0xff1a1a, toneMapped: false }));
-      post.position.set(sx * (this.W - w), -0.1, L.frontZ + 0.05);
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.8, 0.08), new THREE.MeshBasicMaterial({ color: 0xff1a1a, toneMapped: false }));
+      post.position.set(sx * (this.W - w), -0.3, L.frontZ + 0.1);
       this.outG.add(m, post);
     }
     this.group.add(this.outG);
@@ -135,7 +137,7 @@ export class FieldDevices {
   update(dt, st, opt) {
     this.t += dt;
     const { ttAngle, flipL, flipR, kickZ, kickX, meter, tt, flip, meterOn } = st;
-    if (this.outMat) this.outMat.opacity = 0.65 + 0.25 * Math.sin(this.t * 4);
+    if (this.outMat) this.outMat.opacity = 0.5 + 0.2 * Math.sin(this.t * 4);
     for (const t of this.tts) t.g.rotation.y = -ttAngle * t.w;
     this.tts.forEach(t => { t.g.parent.visible = tt; });
     this.rimMat.color.setHSL(st.ttOn ? (this.t * 0.5) % 1 : 0.12, 1, st.ttOn ? 0.55 : 0.4);
