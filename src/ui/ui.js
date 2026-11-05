@@ -484,7 +484,7 @@ export class UI {
     if (d.gem !== 1) rw.push(`${ja ? '宝石のレア度' : 'Gem rarity'} ${x(d.gem)}`);
     if (rw.length) parts.push(`<b>${ja ? '見返り' : 'Rewards'}</b>: ${rw.join(' / ')}`);
     if (DIFF_REWARDS[id]) parts.push(`<b>${ja ? '限定' : 'Exclusive'}</b>: ${esc(t('diffExclusive', DIFF_REWARD_STAGE.theme, DIFF_REWARD_STAGE.skin))}`);
-    parts.push(`<b>${ja ? 'ボス' : 'Boss'}</b>: HP ${x(d.bossHp)} / ${d.bossTime}s / ${ja ? '報酬' : 'reward'} ${x(d.bossReward)}${d.bossEnrage ? (ja ? ' / 怒り' : ' / enrage') : ''}${d.bossRegen ? (ja ? ' / 回復' : ' / regen') : ''}${d.bossBarrier ? (ja ? ' / バリア' : ' / barrier') : ''}`);
+    parts.push(`<b>${ja ? 'ボス' : 'Boss'}</b>: ${ja ? '制限時間' : 'time'} ${d.bossTime}s / ${ja ? '攻撃頻度' : 'attacks'} ${x(1 / d.bossAtk)} / ${ja ? '報酬' : 'reward'} ${x(d.bossReward)}${d.bossEnrage ? (ja ? ' / 怒り' : ' / enrage') : ''}${d.bossRegen ? (ja ? ' / 回復' : ' / regen') : ''}${d.bossBarrier ? (ja ? ' / バリア' : ' / barrier') : ''}`);
     return parts.join('<br>');
   }
 
