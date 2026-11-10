@@ -110,7 +110,8 @@ export class Hopper {
     this.group.add(this.bucket);
     this.x = W + 2; this.tx = this.x; this.tilt = 0; this.pending = 0; this.dir = -1;
   }
-  get parkX() { return this.W + 2; }
+  // parks off the table on whichever side it last finished
+  get parkX() { return (this.parkSide || 1) * (this.W + 2); }
   // game asks where the next medal should come from; null while the bucket is travelling.
   // A special medal (big / rainbow / giant) waits until the bucket reached specialX (off centre).
   pourPoint(special = false) {
@@ -121,23 +122,44 @@ export class Hopper {
     }
     return { x: this.x + (Math.random() - 0.5) * 0.7, y: this.y - 0.2, z: this.z + 0.45 };
   }
+  // Every batch starts at a random point on the table (the bucket first travels there without
+  // pouring) and sweeps at a speed that spreads even a small batch over a good part of the width,
+  // so plain medals land all over the table instead of near the side the bucket comes in from.
   update(dt, pending) {
     this.pending = pending;
-    const W = this.W;
+    const W = this.W, edge = W - 1.5;
+    let speed = 8, pour = false;
     if (pending > 0 && this.specialX != null) {
       // carry a special medal to its drop point first
-      this.tx = this.specialX;
+      this.tx = this.specialX; this.phase = null;
       this.fill.visible = true;
+      pour = Math.abs(this.x - this.specialX) < 0.6;
     } else if (pending > 0) {
-      // sweep across the table while pouring
-      if (Math.abs(this.x - this.tx) < 0.2 || this.tx === this.parkX || this.tx === this._lastSpecial) this.tx = this.dir > 0 ? W - 1.5 : -(W - 1.5), this.dir = -this.dir;
+      if (!this.phase) { this.phase = 'go'; this.tx = (Math.random() * 2 - 1) * edge; }
+      if (this.phase === 'go') {
+        speed = 14;
+        if (Math.abs(this.x - this.tx) < 0.2) {
+          this.phase = 'pour';
+          // head toward the side with more room (random when about the same)
+          this.dir = Math.abs(this.x) < 1.5 ? (Math.random() < 0.5 ? -1 : 1) : -Math.sign(this.x);
+          this.tx = this.dir * edge;
+        }
+      }
+      if (this.phase === 'pour') {
+        pour = true;
+        if (Math.abs(this.x - this.tx) < 0.2) { this.dir = -this.dir; this.tx = this.dir * edge; }
+        // cover about half the width with whatever is left to pour (28 medals / s)
+        speed = Math.max(3.2, Math.min(9, edge / Math.max(0.1, pending / 28)));
+      }
       const k = Math.min(1, pending / 30);
       this.fill.visible = true; this.fill.scale.y = 0.3 + 0.7 * k;
-    } else { this.tx = this.parkX; this.fill.visible = false; }
-    const speed = pending > 0 && this.specialX == null ? (Math.abs(this.tilt) > 0.6 ? 3.2 : 9) : 8;
+    } else {
+      if (Math.abs(this.x) < this.W) this.parkSide = this.x < 0 ? -1 : 1;
+      this.phase = null; this.tx = this.parkX; this.fill.visible = false;
+    }
     this.x += Math.sign(this.tx - this.x) * Math.min(Math.abs(this.tx - this.x), dt * speed);
-    const wantTilt = pending > 0 && Math.abs(this.x) < W ? 1.15 : 0;
-    this.tilt += (wantTilt - this.tilt) * Math.min(1, dt * 5);
+    const wantTilt = pour && Math.abs(this.x) < W ? 1.15 : 0;
+    this.tilt += (wantTilt - this.tilt) * Math.min(1, dt * (pour ? 9 : 5));
     this.bucket.position.x = this.x;
     this.pivot.rotation.x = this.tilt;
     this.lamp.color.setHSL(0.13, 1, pending > 0 ? 0.5 + 0.3 * Math.sin(performance.now() / 60) : 0.3);
