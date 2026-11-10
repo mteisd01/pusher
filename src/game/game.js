@@ -1,8 +1,11 @@
 // Central game orchestrator: input -> physics -> events -> rewards -> presentation
 import * as THREE from 'three';
 import { L, KIND, TOKEN, CRANE } from '../core/layout.js';
+import { RUSH, JP_TIERS } from './balance.js';
 import { B, ITEM_TABLE, ROULETTE, UPGRADES, upgradeCost, WHEEL, WHEEL_NEED, COIN_TOWER, COASTER_ROUTES, CRANE_PLAY, ballExit, offCenterX, routeStart, diffDef, ROCK_REWARD, BOSS, DIFF_REWARDS, DIFF_REWARD_STAGE } from './balance.js';
 import { BossSystem } from './boss.js';
+import { Bingo } from './bingo.js';
+import { Endgame } from './endgame.js';
 import { Progression } from './progression.js';
 import { Slot } from './slot.js';
 import { Features } from './features.js';
@@ -40,6 +43,9 @@ export class Game {
     this.devMode = null;          // 'crane' | 'plinko' while an on-table device takes the input
     this.features = new Features(this);
     this.boss = new BossSystem(this);
+    this.bingo = new Bingo(this);
+    this.end = new Endgame(this);
+    this.rush = null;
   }
 
   get paused() { return this.pauseReasons.size > 0; }
@@ -58,7 +64,7 @@ export class Game {
   upg(id) { return this.prog.upg(id); }
   stockMax() { return B.stockBase + this.upg('stock'); }
   // gate width without the boss jam (the jam beam occupies this width)
-  gateHalfRaw() { return (B.gate.half + B.gate.halfPerLv * this.upg('gate')) * Math.pow(L.halfW / 11, 1.2) * this.diff.gate * (this.fx.fever > 0 ? 1.6 : 1) * this.features.gateMult(); }
+  gateHalfRaw() { return (B.gate.half + B.gate.halfPerLv * this.upg('gate')) * Math.pow(L.halfW / 11, 1.2) * this.diff.gate * (1 + this.end.bonus('gate')) * (this.fx.fever > 0 ? 1.6 : 1) * this.features.gateMult(); }
   gateHalf() { return this.gateHalfRaw() * this.boss.gateMult(); }
   get overlayBusy() { return this.features.busy || this.roulette.active || this.jpRunning; }
   // while a device or lottery holds the input, timed effects (fever, turbo, events, the boss
@@ -66,12 +72,25 @@ export class Game {
   timeStopped() { return !!(this.devMode || this.overlayBusy || (this.tower && this.tower.active)); }
   // a timed boost is running (interactive chances wait for it to end)
   boostActive() { return this.fx.fever > 0 || this.fx.turbo > 0 || this.fx.double > 0 || this.features.boostEvent(); }
-  slotLuck() { return (1 + 0.06 * this.upg('luck') + this.prog.gemLuck()) * this.diff.slot * (this.fx.fever > 0 ? 1.4 : 1); }
-  itemRate() { return (B.itemRate + B.itemRatePerLv * this.upg('item')) * this.diff.item; }
+  slotLuck() { return (1 + 0.06 * this.upg('luck') + this.prog.gemLuck() + this.end.bonus('luck')) * this.diff.slot * (this.fx.fever > 0 ? 1.4 : 1); }
+  itemRate() { return (B.itemRate + B.itemRatePerLv * this.upg('item')) * this.diff.item * (1 + this.end.bonus('item')); }
   autoRate() { return B.autoRateBase + B.autoRatePerLv * this.upg('auto'); }
-  regenCap() { return Math.round((B.regen.capBase + B.regen.capPerLv * this.upg('regen')) * this.diff.regen); }
+  regenCap() { return Math.round((B.regen.capBase + B.regen.capPerLv * this.upg('regen')) * this.diff.regen + this.end.bonus('regen')); }
   regenSec() { return B.regen.secBase - B.regen.secPerLv * this.upg('regen'); }
-  jpBase() { return B.jp.base + B.jp.basePerLv * this.upg('jp'); }
+  jpBase() { return this.jpTierBase('major'); }
+  jpTierBase(id) { const d = JP_TIERS.find(x => x.id === id); return Math.round((d.base + d.perLv * this.upg('jp')) * (1 + this.end.bonus('jpBase'))); }
+  // all four pools: { mini, minor, major, grand } (major = save.jpPool)
+  jpPools() {
+    const s = this.save;
+    if (!s.jpTiers || typeof s.jpTiers !== 'object') s.jpTiers = {};
+    for (const d of JP_TIERS) if (d.id !== 'major' && !(s.jpTiers[d.id] >= this.jpTierBase(d.id))) s.jpTiers[d.id] = this.jpTierBase(d.id);
+    return { mini: s.jpTiers.mini, minor: s.jpTiers.minor, major: s.jpPool, grand: s.jpTiers.grand };
+  }
+  growJp(f) {
+    this.jpPools();
+    f *= 1 + this.end.bonus('jpGrow');
+    for (const d of JP_TIERS) { if (d.id === 'major') this.save.jpPool += d.grow * f; else this.save.jpTiers[d.id] += d.grow * f; }
+  }
   theme() { return themeById(this.settings.theme); }
 
   start() {
@@ -127,7 +146,7 @@ export class Game {
       this.save.coins -= B.dropCost;
       const off = n > 1 ? (i - (n - 1) / 2) * 0.75 : 0;
       const x = Math.max(-(L.halfW - 0.6), Math.min(L.halfW - 0.6, this.launcherX + off + rand(-0.08, 0.08)));
-      const gold = this.features.goldRush() || (this.fx.fever > 0 && Math.random() < B.fever.goldChance) || Math.random() < B.goldRatePerLv * this.upg('gold');
+      const gold = this.features.goldRush() || (this.fx.fever > 0 && Math.random() < B.fever.goldChance) || Math.random() < B.goldRatePerLv * this.upg('gold') + this.end.bonus('gold');
       this.physics.cmd('spawn', gold ? KIND.GOLD : KIND.SILVER, x, L.dropY - 0.1, L.dropZ + rand(-0.15, 0.15), tiltQ(0.25), { x: rand(-0.2, 0.2), y: -2.5, z: rand(-0.1, 0.25) }, 0, 1);
       k++;
     }
@@ -140,7 +159,7 @@ export class Game {
     this.prog.add('dropped', k);
     this.boss.addGauge(k);
     this.prog.addXp(k);
-    if (this.settings.f_jp) this.save.jpPool += B.jp.growPerDrop * k * (1 + Object.keys(this.save.gems).length * 0.01) * this.diff.jp;
+    if (this.settings.f_jp) this.growJp(k * (1 + Object.keys(this.save.gems).length * 0.01) * this.diff.jp);
     if (this.settings.f_items && Math.random() < this.itemRate() * k) this.spawnRandomItem();
     this.dropsSinceSave = (this.dropsSinceSave || 0) + 1;
   }
@@ -202,7 +221,7 @@ export class Game {
     this.devMode = 'crane';
     this.holding = false;
     this.prog.add('cranes');
-    this.physics.cmd('craneStart', CRANE_PLAY.maxGrab, CRANE_PLAY.slip);
+    this.physics.cmd('craneStart', CRANE_PLAY.maxGrab, CRANE_PLAY.slip * Math.max(0.2, 1 - this.end.bonus('crane')));
     this.physics.cmd('craneAim', this.aimX);
     // prize capsules: sure items placed on the field in the claw's reach
     const np = CRANE_PLAY.prizes[0] + Math.floor(Math.random() * (CRANE_PLAY.prizes[1] - CRANE_PLAY.prizes[0] + 1));
@@ -314,6 +333,7 @@ export class Game {
   }
 
   _onGate(e) {
+    this.bingo.onDrop(e.x);
     if (!this.settings.f_slot) return;
     if (this.boss.jam > 0) { if (Math.abs(e.x - this.gateX) <= this.gateHalfRaw() * BOSS.beamReach) this.boss.hitBeam(e.x); return; }
     if (Math.abs(e.x - this.gateX) > this.gateHalf()) return;
@@ -348,6 +368,9 @@ export class Game {
         const zone = this.features.inBonusZone(e.x);
         const v = B.value[e.kind] * mult * (zone && e.kind !== KIND.SILVER ? 2 : 1);
         this.credit(v, 'win');
+        // mastery / star / charm payout bonus (fractions add up across medals)
+        const pb = this.end.bonus('payout');
+        if (pb > 0) { this._payAcc = (this._payAcc || 0) + v * pb; if (this._payAcc >= 1) { const n = Math.floor(this._payAcc); this._payAcc -= n; this.credit(n, 'bonus'); } }
         const bd = BOSS.dmg;
         this.boss.damage(e.kind === KIND.SILVER ? bd.silver : e.kind === KIND.GOLD ? bd.gold : e.kind === KIND.RAINBOW ? bd.rainbow : bd.big, e.x);
         if (zone && Math.random() < 0.18) {
@@ -439,6 +462,7 @@ export class Game {
     this.prog.checkMissions('combo', n);
     let bonus = 0;
     for (const [k, b] of B.combo.steps) if (n >= k) bonus = b;
+    bonus = Math.round(bonus * (1 + this.end.bonus('combo')));
     this.credit(bonus, 'combo');
     this.boss.damage(Math.round(n * BOSS.dmg.combo), 0);
     this.ui.banner(`PUSH COMBO ${n}! +${bonus}`, n >= 40 ? 'rainbow' : '#ffd34d');
@@ -454,7 +478,7 @@ export class Game {
     switch (tok) {
       case TOKEN.WALL:
         if (!s.f_walls) { this.shower(10); break; }
-        this.fx.walls += (B.walls.dur + B.walls.durPerLv * this.upg('wall')) * this.diff.walls;
+        this.fx.walls += (B.walls.dur + B.walls.durPerLv * this.upg('wall')) * this.diff.walls + this.end.bonus('walls');
         this.prog.add('walls'); this.audio.wall();
         break;
       case TOKEN.SHOWER: this.shower(25); break;
@@ -481,7 +505,20 @@ export class Game {
     }
   }
 
-  feverDur() { return B.fever.dur + B.fever.durPerLv * this.upg('fever'); }
+  feverDur() { return B.fever.dur + B.fever.durPerLv * this.upg('fever') + this.end.bonus('fever'); }
+  // celebration tiers for a big total (RUSH result, jackpot…): BIG / MEGA / EPIC WIN
+  bigWin(n, src) {
+    const tier = n >= 1000 ? 3 : n >= 300 ? 2 : n >= 100 ? 1 : 0;
+    if (!tier) return;
+    const name = ['', 'BIG WIN', 'MEGA WIN', 'EPIC WIN'][tier];
+    this.prog.add('bigWins_' + tier);
+    setTimeout(() => {
+      this.backboard.message(name + '!!', 'rainbow', 2.5 + tier * 0.5, 100);
+      this.ui.banner(`${name}!! +${n.toLocaleString()}`, 'rainbow', 2.5 + tier * 0.5);
+      this.effects.confetti(80 * tier); this.stage.addShake(0.2 * tier);
+      tier >= 2 ? this.audio.jackpot() : this.audio.winBig();
+    }, 2700);
+  }
   startFever() {
     const first = this.fx.fever <= 0;
     this.fx.fever += this.feverDur();
@@ -499,16 +536,58 @@ export class Game {
   // ---------- slot callbacks ----------
   onSlotStart() { this.prog.add('slotSpins'); this.audio.reelStart && this.audio.reelStart(); }
   onReach() { this.backboard.message(t('reach'), '#ff4060', 1.4, 110); this.audio.reach(); }
+  // a gold / rainbow stock starts spinning: the LCD announces it
+  onSlotHot(c) {
+    if (c >= 3) { this.backboard.message(t('hotRainbow'), 'rainbow', 1.6, 100); this.audio.reach(); this.stage.addShake(0.15); }
+    else { this.backboard.message('CHANCE!', '#ffd34d', 1.2, 120); }
+  }
+
+  // ---------- RUSH (連チャン) ----------
+  startRush(src) {
+    if (!this.settings.f_rush || !this.settings.f_slot) return;
+    if (this.rush) { this.rush.left = RUSH.spins; return; }
+    this.rush = { left: RUSH.spins, chain: 1, spins: 0, won: 0, src };
+    this.prog.add('rushes');
+    this.backboard.message('RUSH!!', 'rainbow', 2.2, 120);
+    this.announce('rush', 'rainbow', 2.2, [RUSH.spins], 'RUSH START!!');
+    this.audio.fanfare && this.audio.fanfare();
+  }
+  _rushTick() {
+    const r = this.rush;
+    if (!r || r.left > 0 || this.slot.spinning) return;
+    this.rush = null;
+    this.prog.max('rushChain', r.chain);
+    this.prog.max('rushWon', r.won);
+    this.ui.banner(`RUSH ${t('rushEnd')} ${r.chain}${t('rushChain')} +${r.won}`, r.chain >= 3 ? 'rainbow' : '#ffd34d', 2.6);
+    this.bigWin(r.won, 'rush');
+  }
+
   onSlotResult(o) {
+    const inRush = this.slot.inRush && this.rush;
     if (!o) { this.audio.lose(); return; }
     this.prog.add('slotWins');
+    if (inRush) {
+      if (o.kind === 'fever') {
+        this.rush.chain++; this.rush.left = RUSH.spins;
+        const bonus = RUSH.chainBonus * this.rush.chain;
+        this.shower(bonus); this.rush.won += bonus;
+        this.prog.add('rushChains');
+        this.ui.banner(`${this.rush.chain}${t('rushChain')}!! +${bonus}`, 'rainbow', 1.8);
+        this.effects.confetti(60 + this.rush.chain * 20); this.stage.addShake(0.2 + this.rush.chain * 0.05);
+      }
+      this.rush.won += (o.shower || 0) + (o.kind === 'gold' ? o.n * 5 : o.kind === 'rainbow' ? o.n * 25 : 0);
+    } else if (o.kind === 'fever' && this.settings.f_rush) {
+      // RUSH entry lottery (突入抽選)
+      if (Math.random() < RUSH.entry777) setTimeout(() => this.startRush('777'), 1200);
+      else setTimeout(() => this.backboard.message(t('rushMiss'), '#999', 1.4, 110), 1200);
+    }
     this.prog.addXp(5);
-    this.boss.damage(BOSS.dmg.slot * (o.kind === 'fever' || o.kind === 'ball' || o.kind === 'rainbow' ? 2 : 1), 0);
+    this.boss.damage(BOSS.dmg.slot * (o.kind === 'fever' || o.kind === 'ball' || o.kind === 'rainbow' ? 2 : 1) * (inRush ? RUSH.bossDmg : 1), 0);
     const s = this.settings;
     switch (o.kind) {
       case 'fever':
         this.prog.add('sevens');
-        if (s.f_fever) this.startFever(); else this.backboard.message('777', '#ff2d55', 2, 140);
+        if (s.f_fever) { if (inRush && this.fx.fever > 0) this.fx.fever += RUSH.feverAdd; else this.startFever(); } else this.backboard.message('777', '#ff2d55', 2, 140);
         this.shower(o.shower + (s.f_fever ? 0 : 40));
         this.audio.winBig();
         break;
@@ -557,18 +636,42 @@ export class Game {
     }
   }
 
-  payJackpot() {
-    const pool = Math.floor(this.save.jpPool);
-    this.save.jpPool = this.jpBase();
+  pickJpTier() {
+    const k = 1 + 0.12 * this.upg('jp');
+    const list = JP_TIERS.map((d, i) => ({ d, w: d.w * (i >= 2 ? k : 1) * (d.id === 'grand' ? 1 + this.end.bonus('grand') : 1) }));
+    let r = Math.random() * list.reduce((a, b) => a + b.w, 0);
+    for (const e of list) if ((r -= e.w) < 0) return e.d;
+    return JP_TIERS[0];
+  }
+  // JP hit: the LCD climbs the tier ladder (MINI → MINOR → MAJOR → GRAND) and stops at the
+  // tier that pays, then that pool pours out
+  async payJackpot(forceTier) {
+    const tier = forceTier ? JP_TIERS.find(d => d.id === forceTier) : this.pickJpTier();
+    const ti = JP_TIERS.indexOf(tier);
+    this.jpPools();
+    for (let i = 0; i <= ti; i++) {
+      const d = JP_TIERS[i];
+      this.backboard.message(d.id.toUpperCase(), d.color, 0.9, 120);
+      this.ui.banner(`${d.id.toUpperCase()} JACKPOT${i < ti ? '…?' : '!!'}`, d.color, 0.9);
+      this.audio.bell ? this.audio.bell(880 + i * 220, 0.4, 0.06) : this.audio.reach();
+      this.stage.addShake(0.1 + i * 0.12);
+      await new Promise(r => setTimeout(r, this.save.settings.jpSkip ? 650 : 900));
+    }
+    let pool;
+    if (tier.id === 'major') { pool = Math.floor(this.save.jpPool); this.save.jpPool = this.jpBase(); }
+    else { pool = Math.floor(this.save.jpTiers[tier.id]); this.save.jpTiers[tier.id] = this.jpTierBase(tier.id); }
     this.prog.add('jpWins');
+    this.prog.add('jp_' + tier.id);
     this.prog.max('biggestWin', pool);
     let rest = pool;
     const bigs = Math.min(8, Math.floor(rest * 0.4 / 30));
     this.shower(bigs, KIND.BIG); rest -= bigs * 30;
     const sil = Math.min(B.maxShowerPhysical, rest); this.shower(sil); rest -= sil;
     if (rest > 0) this.credit(rest, 'jp');
-    this.backboard.message('JACKPOT!!', 'rainbow', 4, 110);
-    this.ui.banner(`JACKPOT!! ${pool.toLocaleString()}`, 'rainbow', 3.5);
+    this.backboard.message(`${tier.id.toUpperCase()}!!`, 'rainbow', 4, 110);
+    this.announce('jp_' + tier.id, 'rainbow', 3.5, [], `${tier.id.toUpperCase()} JACKPOT!! ${pool.toLocaleString()}`);
+    this.bigWin(pool, 'jp');
+    setTimeout(() => this.startRush('jp'), 3500);
     this.audio.jackpot();
     this.effects.confetti(300);
     this.stage.addShake(1);
@@ -598,7 +701,7 @@ export class Game {
   }
 
   // ---------- shop ----------
-  upgradeCost(u, lv) { return Math.round(upgradeCost(u, lv) * (this.diff.upgCost || 1) / 10) * 10; }
+  upgradeCost(u, lv) { return Math.round(upgradeCost(u, lv) * (this.diff.upgCost || 1) * Math.max(0.5, 1 - this.end.bonus('discount')) / 10) * 10; }
   buyUpgrade(id) {
     const u = UPGRADES.find(x => x.id === id);
     const lv = this.upg(id);
@@ -671,6 +774,8 @@ export class Game {
     } else this.save.regenAcc = 0;
     this._processShower(dt);
     if (s.f_slot) this.slot.update(dt);
+    this._rushTick();
+    this.bingo.update(dt);
     if (this.jpQueue > 0 && !this.overlayBusy && !this.features.queue.length) this._runJackpot();
     this.features.update(dt);
     this.boss.update(dt);

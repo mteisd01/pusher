@@ -7,6 +7,7 @@ import { CraneRig } from './render/crane.js';
 import { FieldDevices } from './render/fieldDevices.js';
 import { Plinko3D } from './render/plinko3d.js';
 import { BossView } from './render/boss3d.js';
+import { CheckerPlates } from './render/checker.js';
 import { WHEEL, WHEEL_NEED, PLINKO, diffDef, BOSS } from './game/balance.js';
 import { CUP, PACK_HEAD } from './core/layout.js';
 import { TRAY, POLE_X } from './render/cabinet.js';
@@ -115,6 +116,7 @@ async function boot() {
   machines.field = new FieldDevices(stage.scene, W0, machines.wheel.group.position);
   const bossView = new BossView(stage.scene, audio, W0);
   game.bossView = bossView;
+  const checker = new CheckerPlates(stage.scene, n => game.bingo.plateX(n));
   coins.setSkin(s.medalSkin);
   game.plinko3d = new Plinko3D(stage.scene, stage, audio, SCREEN, PLINKO);
   game.machines = machines;
@@ -337,7 +339,7 @@ async function boot() {
       lightMode: game.lightMode(), payoutFlash: game.payoutFlash > 0.1 ? game.payoutFlash : 0,
     });
     backboard.update(dt, {
-      slot: game.slot, slotOn: s.f_slot, jpOn: s.f_jp, jpPool: save.jpPool, stock: save.stock, stockMax: game.stockMax(),
+      slot: game.slot, slotOn: s.f_slot, jpOn: s.f_jp, jpPool: save.jpPool, jpPools: game.jpPools(), stock: save.stock, stockMax: game.stockMax(), stockQ: save.stockQ, rush: game.rush,
       fever: game.fx.fever > 0, effects: game.fx, combo: game.combo, theme: game.theme(), event: game.features.event,
       mech: !!(s.f_mechReels && s.f_slot), wheelMeter: s.f_wheel ? (save.wheelMeter || 0) : -1, wheelNeed: WHEEL_NEED,
       boss: game.boss.active, bossGauge: s.f_boss ? game.boss.gaugeFrac() : -1, bossStage: game.boss.stage(), jam: game.boss.jam, freeze: game.boss.freeze, beamHp: game.boss.beamHp, beamMax: game.boss.beamMax, warn: game.boss.warn,
@@ -347,6 +349,7 @@ async function boot() {
     if (!paused) {
       tower.update(dt);
       bossView.update(dt);
+      checker.update(dt, game.bingo.view(), !!s.f_bingo, n => game.bingo.plateX(n));
       M_outZone(machines.field, game.outSent || 0);
       const M = machines;
       M.reels.group.visible = !!(s.f_mechReels && s.f_slot);

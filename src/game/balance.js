@@ -31,13 +31,13 @@ export const B = {
     normal: { slot: 0.8, gate: 1, item: 1, outZone: 0, upgCost: 1, xp: 1, jp: 1, gem: 1, walls: 1, regen: 1, rocks: null,
       bossHp: 1, bossTime: 75, bossAtk: 1, bossReward: 1, bossMix: 0, bossEnrage: false, bossRegen: false, bossBarrier: false, bossBeam: 6, color: '#ffffff', badge: '' },
     hard: { slot: 0.65, gate: 0.8, item: 0.7, outZone: 0.8, upgCost: 1.15, xp: 1.1, jp: 1.1, gem: 1.15, walls: 0.9, regen: 1, rocks: null,
-      bossHp: 1.1, bossTime: 72, bossAtk: 0.85, bossReward: 1.2, bossMix: 0, bossEnrage: false, bossRegen: false, bossBarrier: false, bossBeam: 7, color: '#ff9e1b', badge: '' },
+      bossHp: 1.2, bossTime: 72, bossAtk: 0.85, bossReward: 1.2, bossMix: 0, bossEnrage: false, bossRegen: false, bossBarrier: false, bossBeam: 8, color: '#ff9e1b', badge: '' },
     expert: { slot: 0.55, gate: 0.7, item: 0.6, outZone: 1.1, upgCost: 1.3, xp: 1.25, jp: 1.2, gem: 1.35, walls: 0.8, regen: 0.8, rocks: null,
-      bossHp: 1.15, bossTime: 70, bossAtk: 0.7, bossReward: 1.45, bossMix: 1, bossEnrage: true, bossRegen: false, bossBarrier: false, bossBeam: 8, color: '#ffd34d', badge: '達' },
+      bossHp: 1.35, bossTime: 70, bossAtk: 0.7, bossReward: 1.45, bossMix: 1, bossEnrage: true, bossRegen: false, bossBarrier: false, bossBeam: 10, color: '#ffd34d', badge: '達' },
     shura: { slot: 0.47, gate: 0.62, item: 0.5, outZone: 1.8, upgCost: 1.5, xp: 1.45, jp: 1.35, gem: 1.6, walls: 0.7, regen: 0.5, rocks: [180, 300],
-      bossHp: 0.9, bossTime: 66, bossAtk: 0.6, bossReward: 1.75, bossMix: 1, bossEnrage: true, bossRegen: true, bossBarrier: false, bossBeam: 9, color: '#ff2d55', badge: '修' },
+      bossHp: 1.02, bossTime: 66, bossAtk: 0.6, bossReward: 1.75, bossMix: 1, bossEnrage: true, bossRegen: true, bossBarrier: false, bossBeam: 12, color: '#ff2d55', badge: '修' },
     inferno: { slot: 0.4, gate: 0.55, item: 0.42, outZone: 2.7, upgCost: 1.75, xp: 1.7, jp: 1.5, gem: 2.0, walls: 0.6, regen: 0.5, rocks: [120, 220],
-      bossHp: 0.95, bossTime: 62, bossAtk: 0.5, bossReward: 2.1, bossMix: 2, bossEnrage: true, bossRegen: true, bossBarrier: true, bossBeam: 10, color: '#d500f9', badge: '獄' },
+      bossHp: 1.08, bossTime: 62, bossAtk: 0.5, bossReward: 2.1, bossMix: 2, bossEnrage: true, bossRegen: true, bossBarrier: true, bossBeam: 14, color: '#d500f9', badge: '獄' },
   },
   maxShowerPhysical: 120,
 };
@@ -61,7 +61,7 @@ export const BOSS = {
   warnTime: 2.5, repeatCd: 1.5, stunDur: 3, beamReach: 1.3,
   retryGauge: 0.5, consolation: 0.3,
   // damage per action
-  dmg: { silver: 1, gold: 4, rainbow: 15, big: 20, gate: 4, slot: 25, ball: 60, item: 12, grab: 4, rock: 40, combo: 0.5, beam: 30 },
+  dmg: { silver: 1, gold: 4, rainbow: 15, big: 20, gate: 4, slot: 25, ball: 60, item: 12, grab: 4, rock: 40, combo: 0.5, beam: 15 },
 };
 export const BOSS_TYPES = [
   { id: 'golem', atk: 'rock' }, { id: 'dragon', atk: 'jam' }, { id: 'kraken', atk: 'drain' }, { id: 'phantom', atk: 'freeze' },
@@ -89,6 +89,85 @@ export const SLOT_TABLE = [
   { sym: SYM.GOLD, w: 20, kind: 'gold', n: 2 },
   { sym: SYM.GEM, w: 8, kind: 'rainbow', n: 1 },
 ];
+
+// Jackpot tiers. MAJOR is save.jpPool (the classic pool); MINI / MINOR / GRAND live in
+// save.jpTiers. A JP hit picks a tier by weight w (higher tiers get ×(1 + 0.12·jp upgrade)),
+// pays that pool and resets it to base (+perLv per jp upgrade). grow: pool growth per dropped
+// medal (×difficulty jp, ×gem count bonus).
+export const JP_TIERS = [
+  { id: 'mini', base: 150, perLv: 30, grow: 0.03, w: 60, color: '#7fe7ff' },
+  { id: 'minor', base: 350, perLv: 60, grow: 0.04, w: 28, color: '#7CFFB2' },
+  { id: 'major', base: 500, perLv: 150, grow: 0.2, w: 10, color: '#ffd34d' },
+  { id: 'grand', base: 4000, perLv: 400, grow: 0.05, w: 2, color: 'rainbow' },
+];
+// JP pity (天井): every croon lottery without a JP adds luckPer to the JP hole odds (only that hole); after `max`
+// misses in a row the next lottery starts at the final stage with a ×jpMult JP hole
+export const JP_PITY = { max: 25, luckPer: 0.04, jpMult: 2.5 };
+
+// ---------- long-term goals (game/endgame.js) ----------
+// Mastery: endless coin sinks next to the shop. Each level adds `per` to a bonus key; cost =
+// cost * grow^level (×difficulty upgCost). Bonus keys are read through Endgame.bonus().
+export const MASTERY = [
+  { id: 'payout', key: 'payout', per: 0.01, cost: 2500, grow: 1.16 },
+  { id: 'luck', key: 'luck', per: 0.012, cost: 1800, grow: 1.16 },
+  { id: 'jp', key: 'jpGrow', per: 0.02, cost: 1800, grow: 1.16 },
+  { id: 'fever', key: 'fever', per: 0.5, cost: 1500, grow: 1.16 },
+  { id: 'gate', key: 'gate', per: 0.01, cost: 1500, grow: 1.16 },
+];
+// Rebirth (転生, optional): needs every shop upgrade at max or `won` lifetime coins since the last
+// rebirth. Stars = floor(sqrt(wonSince / starDiv)). Resets coins, shop, mastery, JP pools, boss
+// stages and the lucky road; keeps level, gems, achievements, charms, unlocks and stats.
+export const REBIRTH = { won: 60000, starDiv: 2500 };
+// Star perks: permanent, bought with stars (cost = cost + lv * costGrow), up to max levels
+export const STAR_PERKS = [
+  { id: 'sPayout', key: 'payout', per: 0.03, max: 10, cost: 1, costGrow: 1 },
+  { id: 'sLuck', key: 'luck', per: 0.03, max: 10, cost: 1, costGrow: 1 },
+  { id: 'sJp', key: 'jpBase', per: 0.15, max: 10, cost: 1, costGrow: 1 },
+  { id: 'sFever', key: 'fever', per: 2, max: 10, cost: 1, costGrow: 1 },
+  { id: 'sStart', key: 'startCoins', per: 400, max: 10, cost: 1, costGrow: 1 },
+  { id: 'sDiscount', key: 'discount', per: 0.04, max: 10, cost: 2, costGrow: 1 },
+  { id: 'sGrand', key: 'grand', per: 0.1, max: 10, cost: 2, costGrow: 2 },
+];
+// Capsule gacha (coins): charms are small permanent bonuses, duplicates level a charm up to
+// CHARM_MAX; a maxed duplicate refunds dupRefund of the pull price. rates: N / R / SR / SSR (per
+// 100). pity: an SSR is guaranteed after `pity` pulls without one; a 10-pull holds at least an R.
+export const GACHA = { price: 600, priceTen: 5400, pricePerLv: 8, rates: [62, 27, 9, 2], pity: 60, dupRefund: 0.3 };
+export const CHARM_MAX = 5;
+export const CHARMS = [
+  { id: 'clover', r: 0, key: 'gold', per: 0.01, icon: '🍀' },
+  { id: 'magnifier', r: 0, key: 'item', per: 0.04, icon: '🔍' },
+  { id: 'hourglass', r: 0, key: 'regen', per: 3, icon: '⏳' },
+  { id: 'chain', r: 0, key: 'combo', per: 0.08, icon: '⛓' },
+  { id: 'lens', r: 1, key: 'gate', per: 0.02, icon: '🔭' },
+  { id: 'shield', r: 1, key: 'walls', per: 2, icon: '🛡' },
+  { id: 'dartboard', r: 1, key: 'bingo', per: 0.06, icon: '🎯' },
+  { id: 'claw', r: 1, key: 'crane', per: 0.08, icon: '🦾' },
+  { id: 'flame', r: 2, key: 'fever', per: 1, icon: '🔥' },
+  { id: 'piggy', r: 2, key: 'jpGrow', per: 0.04, icon: '🐷' },
+  { id: 'crown', r: 3, key: 'payout', per: 0.02, icon: '👑' },
+  { id: 'seven', r: 3, key: 'rush', per: 0.06, icon: '7' },
+];
+
+// Stock colours (保留変化): weights of white / blue / gold / rainbow by the pre-rolled result.
+// Rainbow only ever shows on a big win (777 / JP ball / rainbow); gold is mostly a win.
+export const STOCK_COLOR = { lose: [86, 12, 2, 0], small: [45, 40, 15, 0], big: [0, 20, 50, 30] };
+// RUSH: `spins` free spins after a 777 or a jackpot; a 777 inside refills them (continuation,
+// about 1 - (1 - 0.11)^6 = 50 %). Weights per 1000 spins; the rest lose. speed: reel time factor.
+// chainBonus: extra medals per chain step on every 777 inside the RUSH; feverAdd: a 777 inside the
+// RUSH only adds this many seconds of fever (the RUSH itself is the reward).
+export const RUSH = {
+  // entry777: chance that a 777 outside a RUSH starts one (a jackpot always does)
+  spins: 6, speed: 0.55, chainBonus: 3, feverAdd: 5, entry777: 0.5,
+  bossDmg: 0.25,   // slot wins inside a RUSH hurt a boss this much less
+  table: [{ kind: 'fever', w: 110 }, { kind: 'shower', sym: 1, w: 12 }, { kind: 'shower', sym: 2, w: 30 }, { kind: 'shower', sym: 3, w: 40 }, { kind: 'gold', w: 15 }, { kind: 'rainbow', w: 4 }, { kind: 'ball', w: 3 }],
+};
+
+// Number checker + bingo (game/bingo.js). half: hit half-width at the plate (wide table);
+// a plate blinks `warn` s, then stays open openDur s (×1.5 in fever), every ~openEvery s.
+// line[k-1]: pay of the k-th line on a card; full: BINGO pay (+ a JP lottery from stage 2);
+// cardGrow: pays grow by this share per finished card.
+export const BINGO = { half: 0.32, lit: 1, openEvery: 12, warn: 1.2, openDur: 2.6, reachLight: 0.6,
+  line: [5, 6, 8, 10, 12, 15, 18, 22], full: 60, cardGrow: 0.1, bossDmg: 8 };
 
 // JP roulette pockets
 export const ROULETTE = [
@@ -224,7 +303,7 @@ export const COIN_TOWER = { coins: 10, gold: 2 };
 // Ball coaster switch: where a JP ball goes (super/premium weights grow with the luck upgrades).
 // field: dropped onto the table (croon from stage 1 once pushed off); super: straight to the croon
 // from stage 2; premium: straight to the final stage. startStage = croon stage the route starts at.
-export const COASTER_ROUTES = [{ id: 'field', w: 72, startStage: 0 }, { id: 'super', w: 22, startStage: 1 }, { id: 'premium', w: 6, startStage: 2 }];
+export const COASTER_ROUTES = [{ id: 'field', w: 83, startStage: 0 }, { id: 'super', w: 14, startStage: 1 }, { id: 'premium', w: 3, startStage: 2 }];
 export const routeStart = id => (COASTER_ROUTES.find(r => r.id === id) || COASTER_ROUTES[0]).startStage;
 // Crane chance: max medals the claw can hold, chance per medal to slip while lifting
 // prizes: what a crane chance puts on the field (glowing targets, sure items); payMult: medals

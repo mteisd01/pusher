@@ -173,7 +173,6 @@ export class BossSystem {
     }
     this.jam = 0; this.cd.jam = BOSS.jamDur * BOSS.repeatCd;
     this.stun = BOSS.stunDur;
-    a.weak = Math.max(a.weak, BOSS.weakDur + 1); a.weakT = Math.max(a.weakT, BOSS.weakEvery * 0.5);
     a.barrier = 0;
     g.prog.add('beamBreaks');
     this.damage(BOSS.dmg.beam, x, false, true);

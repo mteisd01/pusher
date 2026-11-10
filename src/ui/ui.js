@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import qrcode from 'qrcode-generator';
 import { t, setLang, getLang } from '../i18n.js';
+import { JP_PITY, MASTERY, STAR_PERKS, CHARMS, CHARM_MAX, GACHA, REBIRTH } from '../game/balance.js';
 import { UPGRADES, upgradeCost, xpForLevel, DIFFICULTIES, diffDef, DIFF_REWARDS, DIFF_REWARD_STAGE, BOSS } from '../game/balance.js';
 import { ACHIEVEMENTS } from '../game/progression.js';
 import { THEMES } from '../render/themes.js';
@@ -54,6 +55,7 @@ export class UI {
         <div class="xpbar"><i id="hXp"></i></div>
       </div>
       <div class="hud-fx" id="hFx"></div>
+      <div class="hud-bingo hidden" id="hBingo"></div>
       <div class="hud-tr">
         <button class="ib" id="bPause" aria-label="pause">${ICONS.pause}</button>
         <button class="ib" data-tab="missions" aria-label="missions">${ICONS.missions}<b class="badge hidden" id="hMisBadge"></b></button>
@@ -179,13 +181,18 @@ export class UI {
       chips.push(`<span class="chip ${cls} timed" style="--p:${p}%">${label} ${Math.ceil(v)}${stop}</span>`);
     };
     timed('fever', fx.fever, 'fever', '🔥FEVER');
+    if (g.rush) chips.push(`<span class="chip fever">RUSH ${g.rush.left} · ${g.rush.chain}${t('rushChain')}</span>`);
     timed('walls', fx.walls, 'wall', '🛡');
     timed('turbo', fx.turbo, 'turbo', '≫');
     timed('double', fx.double, 'dbl', '×2');
     timed('magnet', fx.magnet, 'turbo', '🧲');
     timed('flipper', g.settings.f_flipper ? fx.flipper : 0, 'wall', '🏓');
     if (g.settings.f_slot) chips.push(`<span class="chip stock">${t('stock')} ${s.stock}/${g.stockMax()}</span>`);
-    if (g.settings.f_jp) chips.push(`<span class="chip jp">JP ${fmt(s.jpPool)}</span>`);
+    if (g.settings.f_jp) {
+      const jp = g.jpPools();
+      chips.push(`<span class="chip jp">GRAND ${fmt(jp.grand)} · MAJOR ${fmt(jp.major)}</span>`);
+      if ((s.jpMiss || 0) > 0) chips.push(`<span class="chip jp timed" style="--p:${Math.min(100, Math.round((s.jpMiss || 0) / JP_PITY.max * 100))}%">${t('pity')} ${s.jpMiss || 0}/${JP_PITY.max}</span>`);
+    }
     if (g.settings.f_sugoroku) chips.push(`<span class="chip road">🎲${s.dice || 0} · ${(s.roadPos || 0)}/24</span>`);
     const ev = g.features.event;
     if (ev) timed('ev_' + ev.id, ev.t, 'fever', `${t('ev_' + ev.id)}${ev.id === 'challenge' ? ` ${ev.progress || 0}/${ev.target}` : ''}`);
@@ -201,11 +208,22 @@ export class UI {
     } else if (g.settings.f_boss) chips.push(`<span class="chip boss">BOSS ${Math.floor(g.boss.gaugeFrac() * 100)}%</span>`);
     const html = chips.join('');
     if (html !== this._chips) { $('#hFx', this.hud).innerHTML = html; this._chips = html; }
+    // bingo card (top right): marked cells, the blinking / open number, finished lines
+    const bg = $('#hBingo', this.hud);
+    bg.classList.toggle('hidden', !g.settings.f_bingo);
+    if (g.settings.f_bingo) {
+      const v = g.bingo.view(), inLine = new Set(v.lines.flat());
+      const bh = `<div class="bg-h">BINGO <small>${v.cards ? '×' + v.cards : ''}</small></div><div class="bg-g">` + v.card.map((n, i) => {
+        const m = v.marks & (1 << i), lit = v.lit.includes(n);
+        return `<b class="${m ? 'm' : ''}${inLine.has(i) && m ? ' ln' : ''}${lit ? (v.phase === 'open' ? ' open' : ' warn') : ''}${v.flash[n] ? ' hit' : ''}">${n}</b>`;
+      }).join('') + '</div>';
+      if (bh !== this._bingoHtml) { bg.innerHTML = bh; this._bingoHtml = bh; }
+    }
     const ms = s.missions;
     const claim = ms && g.settings.f_missions ? ms.list.filter(m => m.done && !m.claimed).length : 0;
     const b = $('#hMisBadge', this.hud); b.textContent = claim; b.classList.toggle('hidden', !claim);
     if (g.settings.showFps) $('#hFps', this.hud).textContent = `${t('fps')} ${info.fps.toFixed(0)} | ${t('objects')} ${g.objCount} | ${t('physMs')} ${(g.physMs || 0).toFixed(1)}ms`;
-    if (!this.modal.classList.contains('hidden') && (this.tab === 'shop' || this.tab === 'missions' || this.tab === 'stats' || this.tab === 'road')) {
+    if (!this.modal.classList.contains('hidden') && (this.tab === 'shop' || this.tab === 'endgame' || this.tab === 'missions' || this.tab === 'stats' || this.tab === 'road')) {
       this._liveAcc = (this._liveAcc || 0) + 1;
       if (this._liveAcc % 5 === 0) this.renderTab(true);
     }
@@ -307,7 +325,7 @@ export class UI {
   isOpen() { return !this.modal.classList.contains('hidden') || !this.dialog.classList.contains('hidden'); }
 
   renderTabs() {
-    const tabs = [['shop', t('shop')], ['missions', t('missions')], ['road', t('road')], ['achievements', t('achievements')], ['gems', t('gems')], ['stats', t('stats')], ['themes', t('themes')], ['settings', t('settings')], ['data', t('data')], ['guide', t('guide')], ['help', t('help')]];
+    const tabs = [['shop', t('shop')], ['endgame', t('endgame')], ['missions', t('missions')], ['road', t('road')], ['achievements', t('achievements')], ['gems', t('gems')], ['stats', t('stats')], ['themes', t('themes')], ['settings', t('settings')], ['data', t('data')], ['guide', t('guide')], ['help', t('help')]];
     const el = $('#mTabs', this.modal);
     el.innerHTML = tabs.map(([id, n]) => `<button class="tab ${id === this.tab ? 'on' : ''}" data-t="${id}">${n}</button>`).join('');
     el.querySelectorAll('.tab').forEach(b => b.onclick = () => { this.tab = b.dataset.t; this.game.audio.ui(); this.renderTabs(); this.renderTab(); });
@@ -332,6 +350,54 @@ export class UI {
         <button class="btn ${maxed ? '' : 'primary'}" data-buy="${u.id}" ${maxed || g.save.coins < cost ? 'disabled' : ''}>${maxed ? t('max') : `${ICONS.coin}${fmt(cost)}`}</button></div>`;
     }).join('') + `</div><p class="note">${t('regenInfo', g.regenSec(), g.regenCap())}</p>`;
     body.querySelectorAll('[data-buy]').forEach(b => b.onclick = () => { if (g.buyUpgrade(b.dataset.buy)) this.renderTab(true); });
+  }
+
+  // long-term goals: mastery (endless coin sinks), rebirth + star perks, capsule gacha + charms
+  tab_endgame(body) {
+    const g = this.game, E = g.end, e = E.st, ja = getLang() === 'ja';
+    const pct = (k, v) => ['fever', 'walls', 'regen', 'startCoins'].includes(k) ? `+${+v.toFixed(1)}${k === 'startCoins' ? '' : k === 'regen' ? '' : t('sec')}` : `+${+(v * 100).toFixed(1)}%`;
+    const mast = MASTERY.map(m => {
+      const lv = E.masteryLv(m.id), cost = E.masteryCost(m);
+      return `<div class="card"><div class="ct">${t('ms_' + m.id)} <small>Lv${lv}</small></div><div class="cd">${t('bk_' + m.key)} ${pct(m.key, lv * m.per)} → ${pct(m.key, (lv + 1) * m.per)}</div>
+        <button class="btn primary" data-ms="${m.id}" ${g.save.coins < cost ? 'disabled' : ''}>${ICONS.coin}${fmt(cost)}</button></div>`;
+    }).join('');
+    const stars = STAR_PERKS.map(p => {
+      const lv = e.stars[p.id] || 0, max = lv >= p.max, cost = E.starCost(p);
+      return `<div class="card"><div class="ct">★ ${t('sp_' + p.id)} <small>${lv}/${p.max}</small></div><div class="cd">${t('bk_' + p.key)} ${pct(p.key, lv * p.per)}</div>
+        <button class="btn ${max ? '' : 'primary'}" data-sp="${p.id}" ${max || e.starPts < cost ? 'disabled' : ''}>${max ? t('max') : `★${cost}`}</button></div>`;
+    }).join('');
+    const canR = E.canRebirth(), gain = Math.max(1, E.starsFor());
+    const rar = ['N', 'R', 'SR', 'SSR'], rcol = ['#cfd8e6', '#4fc3ff', '#c070ff', '#ffd34d'];
+    const charms = CHARMS.map(c => {
+      const lv = e.charms[c.id] || 0;
+      return `<div class="charm ${lv ? '' : 'locked'}" style="--rc:${rcol[c.r]}"><span class="ci">${lv ? c.icon : '？'}</span><b>${rar[c.r]} ${lv ? t('ch_' + c.id) : '???'}</b><small>${lv ? `Lv${lv}/${CHARM_MAX} · ${t('bk_' + c.key)} ${pct(c.key, lv * c.per)}` : ''}</small></div>`;
+    }).join('');
+    body.innerHTML = `<div class="wallet">${ICONS.coin}<b>${fmt(g.save.coins)}</b><span class="stars">★ ${e.starPts}</span></div>
+      <h3>${t('mastery')}</h3><p class="note">${t('masteryNote')}</p><div class="grid">${mast}</div>
+      <h3>${t('rebirth')} <small>${t('rebirthCount', e.rebirths)}</small></h3>
+      <p class="note">${t('rebirthNote', fmt(REBIRTH.won))}</p>
+      <div class="rebirth"><div>${t('wonSince')}: <b>${fmt(E.wonSince())}</b> · ${t('shopMaxed')}: <b>${E.shopMaxed() ? '✔' : '—'}</b> · ${t('starsNext')}: <b>★${gain}</b></div>
+        <button class="btn ${canR ? 'primary' : ''}" id="eRebirth" ${canR ? '' : 'disabled'}>${t('rebirthDo', gain)}</button></div>
+      <div class="grid">${stars}</div>
+      <h3>${t('gacha')} <small>${t('gachaPity', Math.max(0, GACHA.pity - e.pity))}</small></h3>
+      <p class="note">${t('gachaNote')} N ${GACHA.rates[0]}% / R ${GACHA.rates[1]}% / SR ${GACHA.rates[2]}% / SSR ${GACHA.rates[3]}%</p>
+      <div class="gacha"><button class="btn primary" id="eG1" ${g.save.coins < E.price(1) ? 'disabled' : ''}>${t('pull1')} ${ICONS.coin}${fmt(E.price(1))}</button>
+        <button class="btn primary" id="eG10" ${g.save.coins < E.price(10) ? 'disabled' : ''}>${t('pull10')} ${ICONS.coin}${fmt(E.price(10))}</button></div>
+      <div class="gres" id="eGRes">${this._gres || ''}</div>
+      <div class="charms">${charms}</div>`;
+    body.querySelectorAll('[data-ms]').forEach(b => b.onclick = () => { if (E.buyMastery(b.dataset.ms)) { g.audio.levelUp(); this.renderTab(true); } });
+    body.querySelectorAll('[data-sp]').forEach(b => b.onclick = () => { if (E.buyStar(b.dataset.sp)) { g.audio.levelUp(); this.renderTab(true); } });
+    $('#eRebirth', body).onclick = () => this.confirm(t('rebirthConfirm', gain), () => { const n = E.rebirth(); if (n) { this.toast('★', t('rebirthDone', n)); g.audio.fanfare && g.audio.fanfare(); g.effects.confetti(200); this.renderTab(true); } });
+    const pull = n => {
+      const r = E.pull(n);
+      if (!r) return;
+      const best = Math.max(...r.map(o => o.charm.r));
+      this._gres = r.map(o => `<span class="gr" style="--rc:${rcol[o.charm.r]}">${o.charm.icon} ${rar[o.charm.r]} ${t('ch_' + o.charm.id)}${o.isNew ? ' <b>NEW</b>' : o.refund ? ` +${o.refund}` : ` Lv${o.lv}`}</span>`).join('');
+      if (best >= 3) { g.audio.jackpot && g.audio.jackpot(); g.effects.confetti(150); } else if (best >= 2) g.audio.winBig(); else g.audio.itemGet();
+      this.renderTab(true);
+    };
+    $('#eG1', body).onclick = () => pull(1);
+    $('#eG10', body).onclick = () => pull(10);
   }
 
   missionText(m) { return t('m_' + m.id, m.target); }
@@ -389,7 +455,7 @@ export class UI {
     const g = this.game, st = g.save.stats;
     const time = s => { s = Math.floor(s || 0); return `${Math.floor(s / 3600)}h ${Math.floor(s / 60) % 60}m`; };
     const bs = g.boss.st;
-    const rows = [['bossFights'], ['bossKills'], ['bossBestStage'], ...DIFFICULTIES.map(d => ['bossStage_' + d, `${bs.best[d] || 0} (${t('bossKillsShort')} ${bs.kills[d] || 0})`]), ['rocks'], ['coasters'], ['cranes'], ['craneGrabs'], ['catches'], ['wheels'], ['towers'], ['shakes'], ['diceRolls'], ['roadLaps'], ['events'], ['challenges'], ['pockets'], ['plinkos'], ['croonBest'], ['dropped'], ['won'], ['lost'], ['payout', st.dropped ? `${((st.won || 0) / st.dropped * 100).toFixed(1)}%` : '-'], ['gatePasses'], ['slotSpins'], ['slotWins'], ['sevens'], ['jpLottery'], ['jpWins'], ['fevers'], ['maxCombo'], ['items'], ['gems'], ['chests'], ['biggestWin'], ['maxWallet'], ['playTime', time(st.playTime)]];
+    const rows = [['rushes'], ['rushChain'], ['rushWon'], ['bingos'], ['bingoLines'], ['bingoMarks'], ['jp_mini'], ['jp_minor'], ['jp_major'], ['jp_grand'], ['beamBreaks'], ['flipSaves'], ['rebirths'], ['gachaPulls'], ['bossFights'], ['bossKills'], ['bossBestStage'], ...DIFFICULTIES.map(d => ['bossStage_' + d, `${bs.best[d] || 0} (${t('bossKillsShort')} ${bs.kills[d] || 0})`]), ['rocks'], ['coasters'], ['cranes'], ['craneGrabs'], ['catches'], ['wheels'], ['towers'], ['shakes'], ['diceRolls'], ['roadLaps'], ['events'], ['challenges'], ['pockets'], ['plinkos'], ['croonBest'], ['dropped'], ['won'], ['lost'], ['payout', st.dropped ? `${((st.won || 0) / st.dropped * 100).toFixed(1)}%` : '-'], ['gatePasses'], ['slotSpins'], ['slotWins'], ['sevens'], ['jpLottery'], ['jpWins'], ['fevers'], ['maxCombo'], ['items'], ['gems'], ['chests'], ['biggestWin'], ['maxWallet'], ['playTime', time(st.playTime)]];
     body.innerHTML = `<div class="stats">` + rows.map(([k, v]) => `<div class="srow"><span>${t('st_' + k)}</span><b>${v !== undefined ? v : fmt(st[k] || 0)}</b></div>`).join('') + `</div>`;
   }
 
@@ -473,7 +539,7 @@ export class UI {
       ]],
       ['g_features', [
         ['difficulty', 'select', DIFFICULTIES.map(v => [v, t('d_' + v)])],
-        ['f_slot', 'toggle'], ['slotFast', 'toggle'], ['f_jp', 'toggle'], ['f_croon', 'toggle'], ['f_tower3d', 'toggle'], ['towerCam', 'toggle'], ['f_catcher', 'toggle'], ['f_wheel', 'toggle'], ['f_hopper', 'toggle'], ['f_mechReels', 'toggle'], ['f_beacons', 'toggle'], ['f_boss', 'toggle'], ['f_coaster', 'toggle'], ['f_crane', 'toggle'], ['f_plinko3d', 'toggle'], ['f_turntable', 'toggle'], ['f_flipper', 'toggle'], ['f_meterTube', 'toggle'], ['jpSkip', 'toggle'], ['f_sugoroku', 'toggle'], ['f_events', 'toggle'], ['f_plinko', 'toggle'], ['f_bonusZone', 'toggle'], ['f_items', 'toggle'], ['f_gems', 'toggle'], ['f_fever', 'toggle'], ['f_walls', 'toggle'],
+        ['f_slot', 'toggle'], ['slotFast', 'toggle'], ['f_jp', 'toggle'], ['f_croon', 'toggle'], ['f_tower3d', 'toggle'], ['towerCam', 'toggle'], ['f_catcher', 'toggle'], ['f_wheel', 'toggle'], ['f_hopper', 'toggle'], ['f_mechReels', 'toggle'], ['f_beacons', 'toggle'], ['f_boss', 'toggle'], ['f_rush', 'toggle'], ['f_bingo', 'toggle'], ['f_coaster', 'toggle'], ['f_crane', 'toggle'], ['f_plinko3d', 'toggle'], ['f_turntable', 'toggle'], ['f_flipper', 'toggle'], ['f_meterTube', 'toggle'], ['jpSkip', 'toggle'], ['f_sugoroku', 'toggle'], ['f_events', 'toggle'], ['f_plinko', 'toggle'], ['f_bonusZone', 'toggle'], ['f_items', 'toggle'], ['f_gems', 'toggle'], ['f_fever', 'toggle'], ['f_walls', 'toggle'],
         ['sideLoss', 'toggle'], ['f_combo', 'toggle'], ['f_missions', 'toggle'], ['f_login', 'toggle'], ['f_regen', 'toggle'],
         ['f_achievePopups', 'toggle'], ['f_floatText', 'toggle'], ['f_hints', 'toggle'],
       ]],

@@ -1,9 +1,9 @@
 // v2 game elements: Lucky Road (sugoroku), random field events, center pocket, bonus zone,
 // 3-stage croon jackpot, plinko and the overlay queue that runs mini games one at a time.
 import { L, KIND, TOKEN } from '../core/layout.js';
+import { JP_PITY } from './balance.js';
 import { ROAD, ROAD_LAP_BONUS, ROAD_GATE_PER_DIE, roadMult, CROON, PLINKO, EVENTS, EVENT_INTERVAL, POCKET_CYCLE, BONUS_ZONE, B, BOSS } from './balance.js';
 import { t } from '../i18n.js';
-import { infoText } from './info.js';
 
 const rand = (a, b) => a + Math.random() * (b - a);
 
@@ -254,16 +254,24 @@ export class Features {
   // ---------- mini games ----------
   // start: croon stage to start at (0 = top; the coaster SUPER / PREMIUM routes skip stages)
   async croon(start = 0) {
-    const g = this.g, luck = g.upg('jp') * 0.08 + g.upg('luck') * 0.04;
+    const g = this.g, miss = this.save.jpMiss || 0;
+    // pity (天井): each lottery without a JP makes the JP hole easier; at the ceiling the ball
+    // starts at the final stage with a much bigger JP hole
+    const pity = miss >= JP_PITY.max;
+    if (pity) { start = Math.max(start, 2); g.announce('jpPity', 'rainbow', 2.4, [JP_PITY.max]); }
+    const luck = g.upg('jp') * 0.08 + g.upg('luck') * 0.04;
+    // the pity only widens the JP hole itself (not the NEXT holes)
+    const jpBoost = (1 + miss * JP_PITY.luckPer) * (pity ? JP_PITY.jpMult : 1);
     const stages = CROON.map((st, i) => ({
       title: ['JP CHANCE', 'SECOND STAGE', 'FINAL STAGE'][i],
-      holes: st.holes.map(h => ({ ...h, w: h.good ? 1 + luck : 1 })),
+      holes: st.holes.map(h => ({ ...h, w: h.good ? (1 + luck) * (h.jp ? jpBoost : 1) : 1 })),
     }));
     let r;
     if (this.s.f_tower3d && g.tower) r = await g.tower.run(stages, luck, g.physics, { camera: this.s.towerCam, startStage: start });
     else { r = await g.mini.croon(stages.slice(start), g.save.jpPool); if (r) r = { ...r, stage: r.stage + start }; }
     const h = r.hole;
     g.prog.max('croonBest', r.stage + (h.good ? 1 : 0));
+    this.save.jpMiss = h.jp ? 0 : miss + 1;
     if (h.jp) return g.payJackpot();
     if (h.fever) { if (this.s.f_fever) g.startFever(); else g.shower(40); return; }
     if (h.n) { g.shower(Math.min(60, h.n)); if (h.n > 60) g.credit(h.n - 60, 'jp'); g.ui.banner(`+${h.n}`, '#ffd34d'); g.audio.winBig(); g.prog.max('biggestWin', h.n); }

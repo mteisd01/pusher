@@ -24,11 +24,11 @@ if (only.includes('boss')) {
   await ev(() => { const g = __game; g.boss.st.gauge = g.boss.need() - 1; g.boss.addGauge(5); });
   await p.waitForTimeout(4500);
   await ev(() => { const g = __game, a = g.boss.active; g.boss.cd.jam = 0; a.atkT = 0.05; a.attacks = ['jam']; });
-  await p.waitForTimeout(700);
+  await p.waitForFunction(() => __game.boss.warn, null, { timeout: 30000 }).catch(() => {});
   const w = await ev(() => ({ warn: __game.boss.warn && __game.boss.warn.kind, jam: __game.boss.jam, sub: document.querySelector('.banner-sub').textContent }));
   ok('boss warns before the jam', w.warn === 'jam' && w.jam === 0, JSON.stringify(w));
   await shot('boss_warn');
-  await p.waitForTimeout(2200);
+  await p.waitForFunction(() => __game.boss.jam > 0, null, { timeout: 30000 }).catch(() => {});
   const j = await ev(() => ({ jam: __game.boss.jam, beam: __game.boss.beamHp, card: !document.querySelector('.infocard').classList.contains('hidden') }));
   ok('jam starts with a beam', j.jam > 0 && j.beam > 0, JSON.stringify(j));
   await shot('boss_jam');
@@ -38,7 +38,7 @@ if (only.includes('boss')) {
     for (let i = 0; i < 60 && g.boss.jam > 0; i++) { g.setAim(g.gateXAt(g.time + 0.18)); g.launcherX = g.aimX; g.drop(); await new Promise(r => setTimeout(r, 190)); log.push(g.boss.beamHp); }
     return { jam: g.boss.jam, stun: g.boss.stun, weak: g.boss.active && g.boss.active.weak, log: log.join(',') };
   });
-  ok('beam breaks -> stun + weak point', r.jam === 0 && r.stun > 0 && r.weak > 0, JSON.stringify(r));
+  ok('beam breaks -> stun', r.jam === 0 && r.stun > 0, JSON.stringify(r));
   await shot('boss_break');
   // no jam right after a jam
   const rep = await ev(async () => { const g = __game, a = g.boss.active; a.attacks = ['jam']; a.atkT = 0.05; await new Promise(r => setTimeout(r, 400)); return g.boss.warn && g.boss.warn.kind; });
@@ -90,10 +90,11 @@ if (only.includes('crane')) {
   const r = await ev(async () => {
     const g = __game, coins0 = g.save.coins; let prize = 0;
     const credit = g.credit.bind(g); g.credit = (n, s) => { if (s === 'crane') prize += n; credit(n, s); };
-    const n0 = g.objCount;
+    let spawned = 0; const orig = g.physics.cmd.bind(g.physics);
+    g.physics.cmd = (...c) => { if (c[0] === 'spawn' && c[3] === 3.5) spawned++; return orig(...c); };
     g.startCrane();
-    await new Promise(r => setTimeout(r, 1500));
-    const spawned = g.objCount - n0;
+    for (let i = 0; i < 240 && g.devMode !== 'crane'; i++) await new Promise(r => setTimeout(r, 250));
+    g.physics.cmd = orig;
     g.press(0);
     for (let i = 0; i < 120 && g.devMode; i++) await new Promise(r => setTimeout(r, 250));
     g.credit = credit;
@@ -132,7 +133,7 @@ if (only.includes('ui')) {
   const cm2 = await ev(() => { const r = document.querySelector('.roulette') || document.body; const e = new MouseEvent('contextmenu', { bubbles: true, cancelable: true }); r.dispatchEvent(e); return e.defaultPrevented; });
   ok('context menu blocked on the roulette', cm2);
   await ev(() => { __game.save.dice = 1; });
-  await p.waitForTimeout(1200);
+  await p.waitForFunction(() => document.querySelector('.overlay2d.strip'), null, { timeout: 90000 }).catch(() => {});
   const box = await ev(() => { const r = document.querySelector('.overlay2d.strip'); if (!r) return null; const b = r.getBoundingClientRect(); return { x: b.x, y: b.y, w: b.width, h: b.height, vw: innerWidth }; });
   ok('lucky road strip at the left edge', box && box.x < 20 && box.w < box.vw * 0.12, JSON.stringify(box));
   await shot('road_strip');

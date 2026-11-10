@@ -45,6 +45,8 @@ save.coins = 100000;
 for (const k of ['maxWallet_0', 'maxWallet_1', 'maxWallet_2']) save.achievements[k] = 1; // don't count wallet achievements
 save.settings.difficulty = diff;
 save.settings.f_login = false; save.settings.f_hints = false; save.settings.f_regen = false;
+// OFF=f_rush,f_bingo switches features off (compare with / without them)
+for (const k of (process.env.OFF || '').split(',').filter(Boolean)) save.settings[k] = false;
 const tally = {};
 const roulette = { active: false, run: async idx => { const { ROULETTE } = await import('../src/game/balance.js'); return ROULETTE[idx]; } };
 const mini = {

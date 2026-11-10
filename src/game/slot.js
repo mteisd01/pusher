@@ -1,5 +1,8 @@
 // Three-reel slot machine logic (rendered by Backboard)
-import { SLOT_TABLE, SYM, SYM_COUNT } from './balance.js';
+import { SLOT_TABLE, SYM, SYM_COUNT, STOCK_COLOR, RUSH } from './balance.js';
+
+const BIG_KINDS = ['fever', 'ball', 'rainbow'];
+const pickW = (w, rand = Math.random) => { let r = rand() * w.reduce((a, b) => a + b, 0); for (let i = 0; i < w.length; i++) if ((r -= w[i]) < 0) return i; return 0; };
 
 // Reel strips (symbol ids). Each reel contains every symbol at least once.
 const STRIPS = [
@@ -39,12 +42,53 @@ export class Slot {
     return null;
   }
 
-  canStart() { return !this.spinning && this.g.save.stock > 0; }
+  // Stock with pre-rolled outcomes ("保留変化"): each stock decides its result when it is gained
+  // and shows a colour (0 white, 1 blue, 2 gold, 3 rainbow) whose odds depend on that result.
+  // save.stock stays the count used everywhere; the queue follows it.
+  queue() {
+    const s = this.g.save;
+    if (!Array.isArray(s.stockQ)) s.stockQ = [];
+    const q = s.stockQ;
+    while (q.length < s.stock) q.push(this.preRoll());
+    if (q.length > s.stock) q.length = Math.max(0, s.stock);
+    return q;
+  }
+  preRoll() {
+    const o = this.rollOutcome();
+    const w = !o ? STOCK_COLOR.lose : BIG_KINDS.includes(o.kind) ? STOCK_COLOR.big : STOCK_COLOR.small;
+    return { o: o ? SLOT_TABLE.indexOf(o) : -1, c: pickW(w) };
+  }
+
+  // RUSH (連チャン): free spins after 777 / a jackpot; another 777 inside continues it
+  get rush() { return this.g.rush; }
+  rushRoll() {
+    const tb = RUSH.table, r = Math.random() * 1000, rb = 1 + this.g.end.bonus('rush');
+    let acc = 0;
+    for (const e of tb) { acc += e.w * (e.kind === 'fever' ? rb : 1); if (r < acc) return SLOT_TABLE.find(o => o.kind === e.kind && (e.sym === undefined || o.sym === e.sym)) || null; }
+    return null;
+  }
+
+  canStart() { return !this.spinning && ((this.rush && this.rush.left > 0) || this.g.save.stock > 0); }
 
   start() {
     if (!this.canStart()) return false;
-    this.g.save.stock--;
-    const out = this.rollOutcome();
+    let out;
+    if (this.rush && this.rush.left > 0) {
+      this.rush.left--; this.rush.spins++;
+      out = this.rushRoll();
+      this.hot = out && BIG_KINDS.includes(out.kind) ? 3 : 1;
+      this.inRush = true;
+    } else {
+      const q = this.queue();
+      const it = q.shift();
+      this.g.save.stock--;
+      out = it && it.o >= 0 ? SLOT_TABLE[it.o] : null;
+      // the effects may have been switched off since the stock was rolled
+      if (out && ((out.kind === 'ball' && !this.g.settings.f_jp) || (out.kind === 'item' && !this.g.settings.f_items))) out = null;
+      this.hot = it ? it.c : 0;
+      this.inRush = false;
+    }
+    if (this.hot >= 2 && this.g.onSlotHot) this.g.onSlotHot(this.hot);
     this.result = out;
     let syms;
     if (out) syms = [out.sym, out.sym, out.sym];
@@ -63,7 +107,7 @@ export class Slot {
     }
     this.syms = syms;
     this.reach = syms[0] === syms[1];
-    const fast = this.g.settings.slotFast ? 0.55 : 1;
+    const fast = (this.g.settings.slotFast ? 0.55 : 1) * (this.inRush ? RUSH.speed : 1);
     const base = this.g.balance.slotTime * fast;
     this.stopAt = [base * 0.45, base * 0.7, base * (this.reach ? 1.6 : 1)];
     this.time = 0;
@@ -84,7 +128,8 @@ export class Slot {
   update(dt) {
     this.flash = Math.max(0, this.flash - dt);
     if (!this.spinning) {
-      if (this.g.save.stock > 0 && this.g.settings.f_slot) {
+      if (this.g.settings.f_slot) this.queue();
+      if (((this.rush && this.rush.left > 0) || this.g.save.stock > 0) && this.g.settings.f_slot) {
         this.idle = (this.idle || 0) + dt;
         if (this.idle > 0.35) { this.idle = 0; this.start(); }
       }

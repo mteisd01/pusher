@@ -140,11 +140,14 @@ export class Backboard {
       g.fillStyle = 'rgba(0,0,0,.55)'; roundRect(g, 262, 14, 500, 92, 18); g.fill();
       g.strokeStyle = th.accent; g.lineWidth = 3; g.stroke();
       g.font = '900 30px "Arial Black", Arial'; g.textAlign = 'center'; g.textBaseline = 'middle';
-      g.fillStyle = '#ffd34d'; g.fillText('★ JACKPOT ★', W / 2, 38);
-      g.font = '900 50px "Arial Black", Arial';
+      // four tiers: GRAND big in the middle, the others cycle underneath
+      const jp = st.jpPools || { grand: 0, major: st.jpPool, minor: 0, mini: 0 };
+      g.fillStyle = `hsl(${(t * 120) % 360},100%,65%)`; g.fillText(`★ GRAND ${Math.floor(jp.grand).toLocaleString()} ★`, W / 2, 36);
+      g.font = '900 40px "Arial Black", Arial';
       const glow = 0.6 + 0.4 * Math.sin(t * 4);
       g.shadowColor = '#ffb300'; g.shadowBlur = 18 * glow;
-      g.fillStyle = '#fff3b0'; g.fillText(Math.floor(st.jpPool).toLocaleString(), W / 2, 80);
+      const cyc = [['MAJOR', jp.major, '#ffd34d'], ['MINOR', jp.minor, '#7CFFB2'], ['MINI', jp.mini, '#7fe7ff']][(((Math.floor((t || 0) / 2.5) % 3) + 3) % 3)];
+      g.fillStyle = cyc[2]; g.fillText(`${cyc[0]} ${Math.floor(cyc[1]).toLocaleString()}`, W / 2, 80);
       g.shadowBlur = 0;
     } else {
       g.font = '900 54px "Arial Black", Arial'; g.textAlign = 'center'; g.textBaseline = 'middle';
@@ -201,7 +204,10 @@ export class Backboard {
       const cx = W / 2 - max * lw / 2 + i * lw + lw / 2;
       const on = i < n;
       const gr = g.createRadialGradient(cx - 4, lampY - 4, 1, cx, lampY, 13);
-      if (on) { gr.addColorStop(0, '#fff'); gr.addColorStop(1, st.fever ? `hsl(${(t * 200 + i * 40) % 360},100%,50%)` : '#ff3b30'); }
+      // stock colour (保留変化): white / blue / gold / rainbow
+      const sc = on && st.stockQ && st.stockQ[i] ? st.stockQ[i].c : 0;
+      const col = sc === 3 ? `hsl(${(t * 300 + i * 50) % 360},100%,55%)` : sc === 2 ? '#ffc400' : sc === 1 ? '#2979ff' : '#f2f2f2';
+      if (on) { gr.addColorStop(0, '#fff'); gr.addColorStop(1, col); }
       else { gr.addColorStop(0, '#555'); gr.addColorStop(1, '#222'); }
       g.fillStyle = gr; g.beginPath(); g.arc(cx, lampY, 12, 0, Math.PI * 2); g.fill();
     }
@@ -213,6 +219,7 @@ export class Backboard {
     };
     const fx = st.effects;
     const left = [], right = [];
+    if (st.rush) left.push(['RUSH', `hsl(${(t * 300) % 360},100%,60%)`], [`${st.rush.left}`, '#fff', 30], [`${st.rush.chain}連`, '#ffd34d', 26]);
     if (fx.fever > 0) left.push(['FEVER', `hsl(${(t * 200) % 360},100%,60%)`], [`${Math.ceil(fx.fever)}s`, '#fff', 30]);
     if (fx.walls > 0) left.push(['WALL', '#4fc3ff'], [`${Math.ceil(fx.walls)}s`, '#fff', 30]);
     if (fx.turbo > 0) right.push(['TURBO', '#ff9f43'], [`${Math.ceil(fx.turbo)}s`, '#fff', 30]);

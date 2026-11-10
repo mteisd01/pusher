@@ -46,6 +46,20 @@ tiers('bossPerfect', [[1, 150], [10, 1500]], '✨');
 tiers('bossKills_expert', [[1, 300], [10, 2000]], '達');
 tiers('bossKills_shura', [[1, 500], [10, 3000]], '修');
 tiers('bossKills_inferno', [[1, 800], [10, 5000]], '獄');
+// v6: drop-only extras and long-term goals
+tiers('rushes', [[1, 50], [20, 500], [100, 3000]], '🔥');
+tiers('rushChain', [[3, 100], [6, 600], [10, 3000]], '⛓');
+tiers('bingos', [[1, 80], [10, 600], [50, 3000]], '🎉');
+tiers('bingoLines', [[10, 60], [100, 500], [1000, 3000]], '➖');
+tiers('jp_major', [[1, 500], [10, 3000]], '🟡');
+tiers('jp_grand', [[1, 2000], [5, 10000]], '🌈');
+tiers('bigWins_3', [[1, 1000], [10, 6000]], '💥');
+tiers('beamBreaks', [[1, 100], [20, 800]], '🚫');
+tiers('flipSaves', [[50, 100], [1000, 1000]], '🏓');
+tiers('masteryLv', [[10, 300], [50, 2000], [200, 10000]], '📈');
+tiers('rebirths', [[1, 1000], [5, 5000], [20, 20000]], '★');
+tiers('gachaPulls', [[10, 100], [100, 1000], [500, 5000]], '💊');
+tiers('charmsOwned', [[6, 300], [12, 3000]], '🍀');
 export const ACHIEVEMENTS = A;
 
 const MISSION_POOL = [

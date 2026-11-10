@@ -13,7 +13,8 @@ export function dishHeight(r) {
 // Hole layout for a stage: n holes on the valley ring, good holes may be wider (luck)
 export function holeLayout(holes, luck = 0) {
   const n = holes.length;
-  return holes.map((h, i) => ({ a: i / n * Math.PI * 2, r: CROON_DISH.hole * (h.good ? 1 + luck * 0.5 : 1) }));
+  // h.w (odds weight, set by the game incl. JP pity) widens the hole; without it the luck does
+  return holes.map((h, i) => ({ a: i / n * Math.PI * 2, r: CROON_DISH.hole * Math.min(1.8, h.w !== undefined ? 1 + (h.w - 1) * 0.5 : (h.good ? 1 + luck * 0.5 : 1)) }));
 }
 
 // Triangulated dish surface with holes cut out (+ the rim wall). Used for physics & visuals.
