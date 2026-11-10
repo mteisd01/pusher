@@ -695,9 +695,11 @@ export class Game {
   announce(id, color = '#7fe7ff', dur = 1.8, args = [], title) {
     const inf = infoText(id, ...args);
     if (!inf) { this.ui.banner(title || id, color, dur); return; }
-    this.ui.banner(title || inf.name, color, dur, inf.desc);
+    // effectDesc: 'always' = one-line explanation every time + card the first time, 'first' = card only, 'off' = neither
+    const mode = this.settings.effectDesc || 'always';
+    this.ui.banner(title || inf.name, color, dur, mode === 'always' ? inf.desc : '');
     const seen = this.save.seenInfo || (this.save.seenInfo = {});
-    if (!seen[id] && this.settings.f_hints !== false) { seen[id] = 1; this.ui.infoCard && this.ui.infoCard(inf); }
+    if (!seen[id] && mode !== 'off') { seen[id] = 1; this.ui.infoCard && this.ui.infoCard(inf); }
   }
 
   // ---------- shop ----------

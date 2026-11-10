@@ -541,7 +541,7 @@ export class UI {
         ['difficulty', 'select', DIFFICULTIES.map(v => [v, t('d_' + v)])],
         ['f_slot', 'toggle'], ['slotFast', 'toggle'], ['f_jp', 'toggle'], ['f_croon', 'toggle'], ['f_tower3d', 'toggle'], ['towerCam', 'toggle'], ['f_catcher', 'toggle'], ['f_wheel', 'toggle'], ['f_hopper', 'toggle'], ['f_mechReels', 'toggle'], ['f_beacons', 'toggle'], ['f_boss', 'toggle'], ['f_rush', 'toggle'], ['f_bingo', 'toggle'], ['f_coaster', 'toggle'], ['f_crane', 'toggle'], ['f_plinko3d', 'toggle'], ['f_turntable', 'toggle'], ['f_flipper', 'toggle'], ['f_meterTube', 'toggle'], ['jpSkip', 'toggle'], ['f_sugoroku', 'toggle'], ['f_events', 'toggle'], ['f_plinko', 'toggle'], ['f_bonusZone', 'toggle'], ['f_items', 'toggle'], ['f_gems', 'toggle'], ['f_fever', 'toggle'], ['f_walls', 'toggle'],
         ['sideLoss', 'toggle'], ['f_combo', 'toggle'], ['f_missions', 'toggle'], ['f_login', 'toggle'], ['f_regen', 'toggle'],
-        ['f_achievePopups', 'toggle'], ['f_floatText', 'toggle'], ['f_hints', 'toggle'],
+        ['f_achievePopups', 'toggle'], ['f_floatText', 'toggle'], ['f_hints', 'toggle'], ['effectDesc', 'select', ['always', 'first', 'off'].map(v => [v, t('ed_' + v)])],
       ]],
       ['g_access', [['reduceMotion', 'toggle'], ['highContrast', 'toggle'], ['cbSymbols', 'toggle']]],
       ['g_lang', [['lang', 'select', [['auto', 'Auto'], ['ja', '日本語'], ['en', 'English']]]]],
