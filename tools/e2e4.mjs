@@ -17,7 +17,7 @@ const ev = (f, a) => p.evaluate(f, a);
 const shot = n => p.screenshot({ path: `${out}/v4_${n}.png`, timeout: 120000 });
 const only = (process.env.ONLY || 'coaster,crane,plinko,field').split(',');
 if (only.includes('coaster')) {
-  for (const route of ['field', 'chance', 'jp']) {
+  for (const route of ['field', 'super', 'premium']) {
     const n0 = await ev(() => __game.objCount), j0 = await ev(() => __game.jpQueue + (__game.features.queue.length) + (__game.tower.active ? 1 : 0));
     await ev(r => { __game.pickBallRoute = () => r; __game.launchBall(); }, route);
     await p.waitForTimeout(route === 'field' ? 2500 : 1500); if (route === 'field') await shot('coaster_run');

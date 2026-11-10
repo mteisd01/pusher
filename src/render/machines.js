@@ -111,21 +111,30 @@ export class Hopper {
     this.x = W + 2; this.tx = this.x; this.tilt = 0; this.pending = 0; this.dir = -1;
   }
   get parkX() { return this.W + 2; }
-  // game asks where the next medal should come from; null while the bucket is travelling
-  pourPoint() {
+  // game asks where the next medal should come from; null while the bucket is travelling.
+  // A special medal (big / rainbow / giant) waits until the bucket reached specialX (off centre).
+  pourPoint(special = false) {
     if (Math.abs(this.x) > this.W - 0.5 || this.tilt < 0.7) return null;
+    if (special) {
+      if (this.specialX == null || Math.abs(this.x - this.specialX) > 0.25) return null;
+      return { x: this.x, y: this.y - 0.2, z: this.z + 0.45 };
+    }
     return { x: this.x + (Math.random() - 0.5) * 0.7, y: this.y - 0.2, z: this.z + 0.45 };
   }
   update(dt, pending) {
     this.pending = pending;
     const W = this.W;
-    if (pending > 0) {
+    if (pending > 0 && this.specialX != null) {
+      // carry a special medal to its drop point first
+      this.tx = this.specialX;
+      this.fill.visible = true;
+    } else if (pending > 0) {
       // sweep across the table while pouring
-      if (Math.abs(this.x - this.tx) < 0.2 || this.tx === this.parkX) this.tx = this.dir > 0 ? W - 1.5 : -(W - 1.5), this.dir = -this.dir;
+      if (Math.abs(this.x - this.tx) < 0.2 || this.tx === this.parkX || this.tx === this._lastSpecial) this.tx = this.dir > 0 ? W - 1.5 : -(W - 1.5), this.dir = -this.dir;
       const k = Math.min(1, pending / 30);
       this.fill.visible = true; this.fill.scale.y = 0.3 + 0.7 * k;
     } else { this.tx = this.parkX; this.fill.visible = false; }
-    const speed = pending > 0 ? (Math.abs(this.tilt) > 0.6 ? 3.2 : 9) : 8;
+    const speed = pending > 0 && this.specialX == null ? (Math.abs(this.tilt) > 0.6 ? 3.2 : 9) : 8;
     this.x += Math.sign(this.tx - this.x) * Math.min(Math.abs(this.tx - this.x), dt * speed);
     const wantTilt = pending > 0 && Math.abs(this.x) < W ? 1.15 : 0;
     this.tilt += (wantTilt - this.tilt) * Math.min(1, dt * 5);

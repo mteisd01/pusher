@@ -18,12 +18,15 @@ export class MiniGames {
     this.el.addEventListener('pointermove', e => this._onMove && this._onMove(e));
   }
 
+  // compact: false = full screen; 'strip' = slim panel at the left edge that does not block input
   _open(title, w, h, compact = false) {
     this.active = !compact; this.speed = 1;
     this.el.classList.remove('hidden');
-    this.el.classList.toggle('compact', compact);
+    this.el.classList.toggle('compact', !!compact);
+    this.el.classList.toggle('strip', compact === 'strip');
     this.title.textContent = title; this.sub.textContent = '';
-    const k = compact ? Math.min(window.innerWidth * 0.27 / w, window.innerHeight * 0.34 / h) : Math.min(window.innerWidth * 0.92 / w, window.innerHeight * 0.78 / h);
+    const k = compact === 'strip' ? Math.min(Math.max(64, window.innerWidth * 0.075) / w, window.innerHeight * 0.52 / h)
+      : compact ? Math.min(window.innerWidth * 0.27 / w, window.innerHeight * 0.34 / h) : Math.min(window.innerWidth * 0.92 / w, window.innerHeight * 0.78 / h);
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     this.cw = w * k; this.ch = h * k;
     const c = this.canvas;
@@ -31,7 +34,7 @@ export class MiniGames {
     this.g = c.getContext('2d'); this.g.setTransform(dpr * k, 0, 0, dpr * k, 0, 0);
     this.W = w; this.H = h; this.k = k;
   }
-  _close() { this.el.classList.add('hidden'); this.el.classList.remove('compact'); this.active = false; this._onDown = this._onMove = null; }
+  _close() { this.el.classList.add('hidden'); this.el.classList.remove('compact'); this.el.classList.remove('strip'); this.active = false; this._onDown = this._onMove = null; }
   _loop(fn) {
     return new Promise(resolve => {
       let last = performance.now();
@@ -218,61 +221,59 @@ export class MiniGames {
     });
   }
 
-  // ---------- dice + lucky road board ----------
+  // ---------- dice + lucky road (slim strip at the left edge, clear of the field) ----------
+  // The squares run upwards: the current one near the bottom, the next ones above it.
   async roadMove(board, from, steps, lap, labelFn) {
-    const W = 120, H = 70;
-    this._open(`LUCKY ROAD  LAP ${lap + 1}`, W, H, true);
+    const W = 26, H = 128;
+    this._open(`LAP ${lap + 1}`, W, H, 'strip');
     this.speed = 1.4;
     const g = this.g, n = board.length;
-    // square positions around a rounded rectangle
-    // squares evenly spaced along the perimeter of a rectangle (8 + 4 + 8 + 4)
-    const pos = i => {
-      const x0 = 8, y0 = 10, x1 = W - 8, y1 = H - 7;
-      const w = x1 - x0, hh = y1 - y0, P = 2 * (w + hh);
-      let d = i / n * P;
-      if (d < w) return [x0 + d, y1]; d -= w;
-      if (d < hh) return [x1, y1 - d]; d -= hh;
-      if (d < w) return [x1 - d, y0]; d -= w;
-      return [x0, y0 + d];
-    };
+    const SQ = 13.5, baseY = H - 14;          // y of the current square
     let face = 1, t = 0, phase = 'roll', cur = from, moved = 0, stepT = 0;
     this.audio.dice();
     const final = steps;
+    const toGoal = i => (n - 1 - i + n) % n;
     const draw = () => {
       g.clearRect(0, 0, W, H);
-      const bg = g.createLinearGradient(0, 0, 0, H); bg.addColorStop(0, '#103020'); bg.addColorStop(1, '#06140c');
-      g.fillStyle = bg; g.fillRect(0, 0, W, H);
-      for (let i = 0; i < n; i++) {
-        const [x, y] = pos(i), sq = board[i];
-        g.fillStyle = sq.color; g.strokeStyle = i === cur ? '#fff' : 'rgba(0,0,0,.6)'; g.lineWidth = i === cur ? 0.8 : 0.3;
-        roundRect(g, x - 4.3, y - 4.3, 8.6, 8.6, 1.4); g.fill(); g.stroke();
-        g.fillStyle = '#fff'; g.font = '900 2.1px "Arial Black", Arial'; g.textAlign = 'center'; g.textBaseline = 'middle';
-        const lab = labelFn(sq);
-        g.fillText(lab.slice(0, 6), x, y);
+      // scroll: while moving, the strip slides down one square per step
+      const slide = phase === 'move' ? Math.min(1, stepT / 0.28) : 0;
+      for (let k = -1; k <= 7; k++) {
+        const i = (cur + k + n) % n, sq = board[i];
+        const y = baseY - (k - slide) * SQ;
+        if (y < 18 || y > H + SQ) continue;
+        const now = k === 0 && phase !== 'move';
+        g.globalAlpha = k < 0 ? 0.35 : 1;
+        g.fillStyle = sq.color; g.strokeStyle = now ? '#fff' : 'rgba(0,0,0,.6)'; g.lineWidth = now ? 1 : 0.4;
+        roundRect(g, 2, y - SQ / 2 + 0.6, W - 4, SQ - 1.2, 2); g.fill(); g.stroke();
+        g.fillStyle = '#fff'; g.font = '900 3.6px "Arial Black", Arial'; g.textAlign = 'center'; g.textBaseline = 'middle';
+        g.fillText(labelFn(sq).slice(0, 7), W / 2, y + 0.3);
+        if (k > 0 && k <= final && phase !== 'roll') { g.fillStyle = 'rgba(255,255,255,.85)'; g.font = '700 2.4px Arial'; g.textAlign = 'left'; g.fillText(String(k), 3.2, y - SQ / 2 + 3); }
       }
-      // token
-      const [tx, ty] = pos(cur);
-      const bounce = phase === 'move' ? Math.abs(Math.sin(stepT * Math.PI / 0.28)) * 2 : 0;
-      g.fillStyle = '#ffd34d'; g.beginPath(); g.arc(tx, ty - 5.5 - bounce, 2, 0, TAU); g.fill();
+      g.globalAlpha = 1;
+      // token on the current square
+      const bounce = phase === 'move' ? Math.abs(Math.sin(stepT * Math.PI / 0.28)) * 2.5 : 0;
+      g.fillStyle = '#ffd34d'; g.beginPath(); g.arc(W - 4.2, baseY - 3.5 - bounce, 2.2, 0, TAU); g.fill();
       g.strokeStyle = '#7a5600'; g.lineWidth = 0.4; g.stroke();
-      // die
-      const dx = W / 2, dy = H / 2 + 4, ds = 13;
+      // header: die + squares to the goal
+      g.fillStyle = 'rgba(0,0,0,.75)'; roundRect(g, 0, 0, W, 17, 3); g.fill();
+      const dx = 8.5, dy = 8.5, ds = 12;
       const rot = phase === 'roll' ? Math.sin(t * 20) * 0.4 : 0;
       g.save(); g.translate(dx, dy); g.rotate(rot);
-      g.fillStyle = '#fafafa'; roundRect(g, -ds / 2, -ds / 2, ds, ds, 2.5); g.fill();
-      g.strokeStyle = '#bbb'; g.lineWidth = 0.4; g.stroke();
+      g.fillStyle = '#fafafa'; roundRect(g, -ds / 2, -ds / 2, ds, ds, 2.2); g.fill();
       g.fillStyle = face === 1 ? '#e53935' : '#222';
       const P = { 1: [[0, 0]], 2: [[-1, -1], [1, 1]], 3: [[-1, -1], [0, 0], [1, 1]], 4: [[-1, -1], [1, -1], [-1, 1], [1, 1]], 5: [[-1, -1], [1, -1], [0, 0], [-1, 1], [1, 1]], 6: [[-1, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [1, 1]] }[face];
-      for (const [a, b] of P) { g.beginPath(); g.arc(a * 3.3, b * 3.3, face === 1 ? 2 : 1.3, 0, TAU); g.fill(); }
+      for (const [a, b] of P) { g.beginPath(); g.arc(a * 3, b * 3, face === 1 ? 1.8 : 1.2, 0, TAU); g.fill(); }
       g.restore();
+      g.fillStyle = '#ffd34d'; g.font = '900 3.2px "Arial Black", Arial'; g.textAlign = 'center';
+      g.fillText('GOAL', 20, 6); g.fillStyle = '#fff'; g.font = '900 4.6px "Arial Black", Arial'; g.fillText(String(toGoal(cur)), 20, 12);
     };
     return this._loop(dt => {
       t += dt;
       if (phase === 'roll') {
         if (Math.floor(t * 14) !== Math.floor((t - dt) * 14)) face = 1 + Math.floor(Math.random() * 6);
-        if (t > 1.1) { face = final; phase = 'show'; t = 0; this.audio.step(); }
+        if (t > 1.0) { face = final; phase = 'show'; t = 0; this.audio.step(); }
       } else if (phase === 'show') {
-        if (t > 0.5) { phase = 'move'; t = 0; }
+        if (t > 0.45) { phase = 'move'; t = 0; }
       } else if (phase === 'move') {
         stepT += dt;
         if (stepT > 0.28) { stepT = 0; cur = (cur + 1) % n; moved++; this.audio.step(); if (moved >= final) { phase = 'land'; t = 0; } }

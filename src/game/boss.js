@@ -17,6 +17,10 @@ export class BossSystem {
     this.pending = false;     // gauge full, waiting for the intro slot
     this.jam = 0;             // gate jammed (s)
     this.freeze = 0;          // pusher slowed + guard walls off (s)
+    this.cd = { jam: 0, freeze: 0 };   // after a jam / freeze ends the boss cannot repeat it for a while
+    this.beamHp = 0; this.beamMax = 0; // the jam beam breaks after this many medals hit it
+    this.warn = null;         // { kind, t } telegraphed attack
+    this.stun = 0;            // boss stunned (beam broken): no attacks, no regeneration
     this.popAcc = 0; this.popT = 0; this.popX = 0;
   }
   get on() { return !!this.g.settings.f_boss; }
@@ -45,7 +49,7 @@ export class BossSystem {
     if (b.gauge >= this.need()) {
       b.gauge = this.need();
       this.pending = true;
-      this.g.features.enqueue(() => this.intro());
+      this.g.features.enqueue(() => this.intro(), 'boss');
     }
   }
 
@@ -80,30 +84,43 @@ export class BossSystem {
 
   update(dt) {
     const a = this.active, g = this.g;
-    this.jam = Math.max(0, this.jam - dt);
-    this.freeze = Math.max(0, this.freeze - dt);
+    if (this.jam > 0 && (this.jam -= dt) <= 0) { this.jam = 0; this.cd.jam = BOSS.jamDur * BOSS.repeatCd; }
+    if (this.freeze > 0 && (this.freeze -= dt) <= 0) { this.freeze = 0; this.cd.freeze = BOSS.freezeDur * BOSS.repeatCd; }
+    for (const k in this.cd) this.cd[k] = Math.max(0, this.cd[k] - dt);
+    this.stun = Math.max(0, this.stun - dt);
     if (this.popT > 0) { this.popT -= dt; if (this.popT <= 0 && this.popAcc > 0) { g.ui.popup(`-${Math.round(this.popAcc)}`, this.popX, 5, L.backWallZ + 0.5, '#ff5252', 1.3); this.popAcc = 0; } }
     if (!a) return;
     const d = this.d;
+    if (g.timeStopped()) return;   // a device / lottery holds the input: the boss clock waits too
     a.t -= dt; a.idle += dt;
     // weak point: the core opens for a few seconds (gate passes deal critical damage)
     if (a.weak > 0) a.weak = Math.max(0, a.weak - dt);
-    else if ((a.weakT -= dt) <= 0) { a.weak = BOSS.weakDur; a.weakT = BOSS.weakEvery; g.ui.banner(t('bossWeak'), '#7CFFB2', 1.4); g.audio.reach && g.audio.reach(); }
+    else if ((a.weakT -= dt) <= 0) { a.weak = BOSS.weakDur; a.weakT = BOSS.weakEvery; g.announce('bossWeak', '#7CFFB2', 1.4, [], t('bossWeak')); g.audio.reach && g.audio.reach(); }
     // inferno: barrier phases (only weak-point hits get through)
     if (d.bossBarrier) {
       if (a.barrier > 0) a.barrier = Math.max(0, a.barrier - dt);
-      else if ((a.barrierT -= dt) <= 0) { a.barrier = BOSS.barrierDur; a.barrierT = BOSS.barrierEvery; g.ui.banner(t('bossBarrier'), '#b388ff', 1.4); g.audio.wall && g.audio.wall(); }
+      else if ((a.barrierT -= dt) <= 0) { a.barrier = BOSS.barrierDur; a.barrierT = BOSS.barrierEvery; g.announce('bossBarrier', '#b388ff', 1.4, [], t('bossBarrier')); g.audio.wall && g.audio.wall(); }
     }
     // carnage+: the boss regenerates when left alone
-    if (d.bossRegen && a.idle > BOSS.regenAfter) a.hp = Math.min(a.hpMax, a.hp + a.hpMax * BOSS.regenRate * dt);
+    if (d.bossRegen && !this.stun && a.idle > BOSS.regenAfter) a.hp = Math.min(a.hpMax, a.hp + a.hpMax * BOSS.regenRate * dt);
     // attacks (faster when enraged)
     const enraged = d.bossEnrage && a.hp < a.hpMax * 0.3;
-    if (enraged && !a.enraged) { a.enraged = true; g.ui.banner(t('bossEnrage'), '#ff1744', 1.6); g.stage.addShake(0.3); }
-    if ((a.atkT -= dt * (enraged ? 2 : 1)) <= 0) {
+    if (enraged && !a.enraged) { a.enraged = true; g.announce('bossEnrage', '#ff1744', 1.6, [], t('bossEnrage')); g.stage.addShake(0.3); }
+    // attacks are telegraphed (BOSS.warnTime) so the player can react; jam / freeze never repeat
+    // back to back (cooldown after they end) and the jam beam can be broken by medals
+    if (this.warn) {
+      if ((this.warn.t -= dt) <= 0) { const k = this.warn.kind; this.warn = null; this.attack(k); }
+    } else if (!this.stun && (a.atkT -= dt * (enraged ? 2 : 1)) <= 0) {
       a.atkT = BOSS.attackEvery * d.bossAtk * rand(0.8, 1.2);
-      this.attack(pick(a.attacks));
+      const ok = a.attacks.filter(k => !(k === 'jam' && (this.jam > 0 || this.cd.jam > 0)) && !(k === 'freeze' && (this.freeze > 0 || this.cd.freeze > 0)));
+      const pool = ok.length ? ok : ['rock', 'drain'];
+      const kind = pick(pool);
+      this.warn = { kind, t: BOSS.warnTime, dur: BOSS.warnTime };
+      g.announce('bwarn_' + kind, '#ffab40', 1.6);
+      if (g.bossView && g.bossView.charge) g.bossView.charge(kind);
+      g.audio.reach && g.audio.reach();
     }
-    if (g.bossView) g.bossView.state({ hp: a.hp / a.hpMax, weak: a.weak > 0, barrier: a.barrier > 0, enraged });
+    if (g.bossView) g.bossView.state({ hp: a.hp / a.hpMax, weak: a.weak > 0, barrier: a.barrier > 0, enraged, jam: this.jam > 0, stun: this.stun > 0, warnK: this.warn ? this.warn.t / this.warn.dur : 0, gateX: g.gateX });
     if (a.hp <= 0) this.defeat();
     else if (a.t <= 0) this.retreat();
   }
@@ -113,14 +130,14 @@ export class BossSystem {
     a.hurt = true;
     g.prog.add('bossAttacks');
     if (g.bossView) g.bossView.attack(kind);
-    g.ui.banner(t('batk_' + kind), '#ff6e40', 1.5);
+    g.announce('batk_' + kind, '#ff6e40', 1.6, [this.beamFor()]);
     switch (kind) {
       case 'rock': {
         const n = 1 + Math.floor(Math.random() * (a.stage > 4 ? 3 : 2));
         for (let i = 0; i < n; i++) setTimeout(() => this.active && g.features.dropRock(undefined, true), 500 + i * 450);
         break;
       }
-      case 'jam': this.jam = BOSS.jamDur; g.audio.wall && g.audio.wall(); break;
+      case 'jam': this.jam = BOSS.jamDur; this.beamHp = this.beamMax = this.beamFor(); g.audio.wall && g.audio.wall(); break;
       case 'drain': g.physics.cmd('drain', Math.round(rand(...BOSS.drain))); break;
       case 'freeze': this.freeze = BOSS.freezeDur; g.audio.sweep && g.audio.sweep(800, 120, 0.8, 0.08, 0, 'triangle'); break;
     }
@@ -141,10 +158,34 @@ export class BossSystem {
     return v;
   }
   onGate(x) { const a = this.active; if (a) this.damage(BOSS.dmg.gate, x, a.weak > 0); }
+  beamFor() { return this.d.bossBeam || 6; }
+  // a medal hit the jam beam in the gate: enough hits break it (jam ends, boss stunned, weak point opens)
+  hitBeam(x) {
+    const a = this.active, g = this.g;
+    if (!a || this.jam <= 0) return;
+    this.beamHp = Math.max(0, this.beamHp - 1);
+    g.prog.add('beamHits');
+    if (this.beamHp > 0) {
+      g.ui.popup(`BEAM ${this.beamHp}/${this.beamMax}`, x, L.gateY + 1, L.dropZ, '#ff9e40', 1);
+      g.audio.thump && g.audio.thump(x / L.halfW * 0.8, 0.25, 160);
+      if (g.bossView && g.bossView.hit) g.bossView.hit(0, false);
+      return;
+    }
+    this.jam = 0; this.cd.jam = BOSS.jamDur * BOSS.repeatCd;
+    this.stun = BOSS.stunDur;
+    a.weak = Math.max(a.weak, BOSS.weakDur + 1); a.weakT = Math.max(a.weakT, BOSS.weakEvery * 0.5);
+    a.barrier = 0;
+    g.prog.add('beamBreaks');
+    this.damage(BOSS.dmg.beam, x, false, true);
+    g.announce('beamBroken', '#7CFFB2', 2);
+    g.backboard.message('BREAK!', '#7CFFB2', 1.6, 120);
+    g.effects.burst && g.effects.burst(x, L.gateY, L.dropZ, '#ff9e40', 40, 6, 0.8, 1);
+    g.stage.addShake(0.35); g.audio.fanfare && g.audio.fanfare();
+  }
 
   defeat() {
     const g = this.g, a = this.active, b = this.st, id = this.diffId;
-    this.active = null; this.jam = 0; this.freeze = 0;
+    this._clear();
     b.stage[id] = a.stage + 1;
     b.best[id] = Math.max(b.best[id] || 0, a.stage);
     b.kills[id] = (b.kills[id] || 0) + 1;
@@ -164,7 +205,7 @@ export class BossSystem {
 
   retreat() {
     const g = this.g, a = this.active, b = this.st;
-    this.active = null; this.jam = 0; this.freeze = 0;
+    this._clear();
     b.gauge = this.d.bossBarrier ? 0 : Math.round(this.need() * BOSS.retryGauge);
     const frac = Math.max(0, Math.min(1, 1 - a.hp / a.hpMax));
     const r = Math.round(this.rewardFor(a.stage) * frac * BOSS.consolation);
@@ -194,6 +235,7 @@ export class BossSystem {
   wallsBlocked() { return this.freeze > 0; }
 
   // difficulty switch / feature off in the middle of a battle: the boss just leaves
-  abort() { if (this.active) { this.active = null; this.jam = 0; this.freeze = 0; if (this.g.bossView) this.g.bossView.retreat(); } this.pending = false; }
+  _clear() { this.active = null; this.jam = 0; this.freeze = 0; this.warn = null; this.stun = 0; this.cd.jam = this.cd.freeze = 0; this.beamHp = 0; }
+  abort() { if (this.active) { this._clear(); if (this.g.bossView) this.g.bossView.retreat(); } this.pending = false; }
   static diffs() { return DIFFICULTIES; }
 }

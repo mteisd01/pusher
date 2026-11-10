@@ -13,7 +13,7 @@ export class CraneRig {
     const paint = new THREE.MeshPhysicalMaterial({ color: 0xd81b60, metalness: 0.5, roughness: 0.3, clearcoat: 1, clearcoatRoughness: 0.08 });
     const dark = new THREE.MeshStandardMaterial({ color: 0x1b1b22, metalness: 0.6, roughness: 0.35 });
     this.ledMat = new THREE.MeshBasicMaterial({ color: 0xff4fa0, toneMapped: false });
-    const rx = W + 1.3, y = CRANE.railY, z0 = CRANE.parkZ - 0.6, z1 = L.frontZ - 1.0;
+    const rx = W + 1.3, y = CRANE.railY, z0 = CRANE.parkZ - 0.6, z1 = CRANE.chuteZ + 0.6;
     // side rails on posts standing on the side decks
     for (const sx of [-1, 1]) {
       const rail = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.26, z1 - z0), chrome);

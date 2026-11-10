@@ -142,6 +142,7 @@ export class CroonTower {
     this.active = true;
     this.result = null;
     this.camFocus = opts.camera !== false;
+    this.startStage = Math.max(0, Math.min(stages.length - 1, opts.startStage || 0));
     this._focus(0);
     this.audio.setMood('croon');
     return new Promise(res => {
@@ -214,7 +215,17 @@ export class CroonTower {
       const p = this.helix.getPoint(k * k);
       b.position.copy(p);
       this.audio.croonRoll(0.5);
-      if (k >= 1) this._startStage(0);
+      if (k >= 1) {
+        // SUPER / PREMIUM: the ball falls straight through the upper dishes to its start stage
+        if (this.startStage > 0) { this.si = 0; this.anim = { kind: 'skip', t: 0, dur: 0.5 + 0.35 * this.startStage }; this._focus(this.startStage); }
+        else this._startStage(0);
+      }
+    } else if (a.kind === 'skip') {
+      const k = Math.min(1, a.t / a.dur);
+      const from = STAGE_Y[0] + 0.4, to = STAGE_Y[this.startStage] + 0.4;
+      b.position.set(0, from + (to - from) * k * k, 0);
+      b.scale.setScalar(CROON_DISH.ball * STAGE_SCALE[this.startStage]);
+      if (k >= 1) this._startStage(this.startStage);
     } else if (a.kind === 'play') {
       const s = this.lastS;
       if (s) {

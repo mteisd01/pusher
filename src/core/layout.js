@@ -51,10 +51,12 @@ export const cupXAt = t => (L.halfW - 2.2) * (0.65 * Math.sin(t * 0.31) + 0.35 *
 // player; flat medals are held by friction, a ball rolls)
 export const BALLP = { r: 0.6, density: 1.6, friction: 0.5, angDamp: 0.6, restitution: 0.15, tilt: 2.5 };
 // Crane over the table: park position / sweep range / claw geometry
-export const CRANE = { parkZ: -8.6, parkDx: 1.3, z0: -6.0, z1: 2.4, idleY: 5.6, railY: 6.3, hubR: 0.5, finger: 0.55, grabR: 0.9, sweep: 0.55 };
+// chuteZ: the claw drops its prize over the payout tray (beyond the front edge)
+export const CRANE = { parkZ: -8.6, parkDx: 1.3, z0: -6.0, z1: 2.4, idleY: 5.6, railY: 6.3, hubR: 0.5, finger: 0.55, grabR: 0.9, sweep: 0.55, chuteZ: 6.7 };
 // Field turntables (x = ±(halfW - TURNTABLE.dx)) and gutter flippers
 export const TURNTABLE = { dx: 4.0, z: 3.0, r: 1.9, w: 0.7 };
-export const FLIPPER = { len: 2.6, rest: -0.7, kick: 0.45, period: 1.25 };
+// swing: seconds of the kick stroke (shorter = harder hit)
+export const FLIPPER = { len: 3.0, rest: -0.7, kick: 0.65, period: 0.9, swing: 0.13 };
 // Header length of the packed transform buffer (see PusherPhysics.pack)
 export const PACK_HEAD = 16;
 export const GIANT = { r: 1.55, hh: 0.2 };

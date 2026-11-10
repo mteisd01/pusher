@@ -55,9 +55,14 @@ export class FieldDevices {
       const bar = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.36, FLIPPER.len), chrome); bar.position.z = FLIPPER.len / 2;
       const pad = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.3, FLIPPER.len - 0.3), rubber); pad.position.set(-sx * 0.04, 0, FLIPPER.len / 2);
       const post = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.18, 0.5, 16), chrome);
-      pivot.add(bar, pad, post);
+      // LED strip along the bar and a lamp on the pivot: dim at rest, chasing colours while flapping
+      const ledMat = new THREE.MeshBasicMaterial({ color: 0x5c6bc0, toneMapped: false });
+      const led = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.06, FLIPPER.len - 0.2), ledMat); led.position.set(0, 0.21, FLIPPER.len / 2);
+      const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.2, 16, 10), ledMat); lamp.position.y = 0.32;
+      const glow = new THREE.PointLight(0x7c8cff, 0, 4, 2); glow.position.set(0, 0.6, FLIPPER.len / 2);
+      pivot.add(bar, pad, post, led, lamp, glow);
       this.group.add(pivot);
-      this.flips.push({ pivot, side: sx });
+      this.flips.push({ pivot, side: sx, ledMat, glow });
     }
     // kicker: slot lamp on the back wall + plunger
     this.kickLamp = new THREE.MeshBasicMaterial({ color: 0xff5030, toneMapped: false });
@@ -145,6 +150,8 @@ export class FieldDevices {
       const f = this.flips[i];
       f.pivot.visible = flip;
       f.pivot.rotation.y = Math.atan2(-f.side * Math.sin(a), Math.cos(a));
+      if (st.flipOn) { f.ledMat.color.setHSL((this.t * 1.5 + i * 0.5) % 1, 1, 0.6); f.glow.intensity = 3 + 2 * Math.sin(this.t * 20); }
+      else { f.ledMat.color.setHSL(0.65, 0.6, 0.25 + 0.1 * Math.sin(this.t * 2 + i)); f.glow.intensity = 0; }
     });
     // kicker
     const active = kickZ > L.backWallZ - 0.7;

@@ -64,8 +64,8 @@ const { CroonPhysics, holeLayout } = await import('../src/core/croonPhysics.js')
 const croonPhys = new CroonPhysics(RAPIER);
 const tower = {
   active: false,
-  run: async (stages, luck) => {
-    for (let i = 0; i < stages.length; i++) {
+  run: async (stages, luck, _p, opts = {}) => {
+    for (let i = opts.startStage || 0; i < stages.length; i++) {
       croonPhys.start(holeLayout(stages[i].holes, luck), [0.75, -0.95, 1.15][i]);
       let r = null; for (let f = 0; f < 60 * 60 && !r; f++) r = croonPhys.step(1 / 60);
       croonPhys.stop();
@@ -78,7 +78,7 @@ const game = new Game({ stage: proxy, coins: proxy, backboard: proxy, effects: p
 // ball coaster: hands the ball over at the real exit points right away
 const { ballExit } = await import('../src/game/balance.js');
 const routes = {};
-const coaster = { busy: false, launch: (route, cb) => { routes[route] = (routes[route] || 0) + 1; if (route === 'jp') return cb(route, null, null); const e = ballExit(route, phys.strokeRange()[1]); cb(route, { x: e.x, y: e.y, z: e.z }, e.v); } };
+const coaster = { busy: false, launch: (route, cb, dropX = 0) => { routes[route] = (routes[route] || 0) + 1; if (route !== 'field') return cb(route, null, null); const e = ballExit(dropX, phys.strokeRange()[1]); cb(route, { x: e.x, y: e.y, z: e.z }, e.v); } };
 game.machines = { wheel: { spin: async () => {} }, cup: {}, coaster };
 // the real plinko physics (random drop position)
 const { PlinkoPhysics, PLINKO_BOARD } = await import('../src/core/plinkoPhysics.js');

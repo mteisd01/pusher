@@ -125,7 +125,9 @@ export class BossView {
     this.lift.rotation.set(0, 0, 0); this.lift.scale.setScalar(1);
     this.audio && this.audio.thump && this.audio.thump(0, 0.9, 40);
   }
-  state(s) { this.hp = s.hp; this.weak = s.weak; this.barrier = s.barrier; this.enraged = s.enraged; }
+  state(s) { this.hp = s.hp; this.weak = s.weak; this.barrier = s.barrier; this.enraged = s.enraged; this.jam = s.jam; this.warnK = s.warnK || 0; this.stun = s.stun; this.gateX = s.gateX || 0; }
+  // telegraph: the core charges up (and the jam aims a thin sight line at the gate) before the attack
+  charge(kind) { this.chargeKind = kind; }
   hit(v, crit) { this.flash = Math.min(1, this.flash + (crit ? 1 : 0.25)); this.recoil = Math.min(1, this.recoil + (crit ? 0.8 : 0.12)); }
   attack(kind) { this.atk = kind; this.atkT = 0; }
   defeat() { this.mode = 'die'; this.dieT = 0; }
@@ -161,8 +163,11 @@ export class BossView {
     if (this.mode !== 'die') this.lift.rotation.x = -this.recoil * 0.25;
     // core / eyes / shield
     const pulse = 0.5 + 0.5 * Math.sin(this.t * 10);
-    this.coreMat.emissive.setHex(this.weak ? 0x00ff88 : 0xff5a1f);
-    this.coreMat.emissiveIntensity = (this.weak ? 2.5 + 2 * pulse : 0.8 + this.flash * 2);
+    const warn = this.warnK > 0;
+    this.coreMat.emissive.setHex(this.weak ? 0x00ff88 : warn ? (Math.sin(this.t * 30) > 0 ? 0xffab40 : 0xffffff) : this.stun ? 0x6080ff : 0xff5a1f);
+    this.coreMat.emissiveIntensity = (this.weak ? 2.5 + 2 * pulse : warn ? 2 + 3 * (1 - this.warnK) : 0.8 + this.flash * 2);
+    if (this.stun && this.mode === 'fight') this.lift.rotation.z = Math.sin(this.t * 7) * 0.12;
+    else if (this.mode === 'fight') this.lift.rotation.z = 0;
     if (p && p.core) p.core.scale.setScalar((this.id === 'phantom' ? 0.45 : 1) * (this.weak ? 1.35 + 0.15 * pulse : 1));
     this.eyeMat.color.setHex(this.enraged ? (pulse > 0.5 ? 0xff1744 : 0xff8a80) : this.flash > 0.5 ? 0xffffff : 0xffe14d);
     this.light.intensity = (this.weak ? 6 : 2) + this.flash * 6;
@@ -184,11 +189,16 @@ export class BossView {
       this.atkT += dt;
       const k = Math.max(0, Math.sin(Math.min(1, this.atkT / 1.2) * Math.PI));
       const from = new THREE.Vector3(); (p && p.core ? p.core : this.lift).getWorldPosition(from);
-      if (this.atk === 'jam') this._beam(from, new THREE.Vector3(0, L.gateY, L.dropZ), 0xff3d00, k * 0.8);
+      if (this.atk === 'jam') this._beam(from, new THREE.Vector3(this.gateX, L.gateY, L.dropZ), 0xff3d00, Math.max(k * 0.8, 0.45));
       else if (this.atk === 'drain') this._beam(new THREE.Vector3(0, L.pusherH + 6, L.dropZ), new THREE.Vector3(0, 0.2, 2.5), 0xb388ff, k * 0.6);
       else this.beam.material.opacity = 0;
       if (this.atk === 'freeze') { const s = 1 + this.atkT * 9; this.ring.scale.set(s, s, s); this.ring.position.z = 0; this.ring.material.opacity = Math.max(0, 0.8 - this.atkT * 0.6); }
       if (this.atkT > 1.4) { this.atk = null; this.beam.material.opacity = 0; this.ring.material.opacity = 0; }
-    }
+    } else if (this.jam || (this.warnK > 0 && this.chargeKind === 'jam')) {
+      // the jam beam stays connected to the gate while it holds (thin sight line while charging)
+      const from = new THREE.Vector3(); (p && p.core ? p.core : this.lift).getWorldPosition(from);
+      this._beam(from, new THREE.Vector3(this.gateX, L.gateY, L.dropZ), this.jam ? 0xff3d00 : 0xffab40, this.jam ? 0.45 + 0.15 * pulse : 0.25 * pulse);
+      this.beam.scale.x = this.beam.scale.z = this.jam ? 1 : 0.35;
+    } else if (this.beam.material.opacity > 0) { this.beam.material.opacity = 0; this.beam.scale.x = this.beam.scale.z = 1; }
   }
 }

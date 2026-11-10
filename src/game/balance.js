@@ -3,7 +3,7 @@ import { L, KIND, TOKEN } from '../core/layout.js';
 
 export const B = {
   startCoins: 120,
-  flipperDur: 12,            // seconds the gutter flippers kick
+  flipperDur: 20,            // seconds the gutter flippers kick (they also kick during fever)
   dropCost: 1,
   holdInterval: 0.2,          // seconds between drops while holding
   autoRateBase: 1.6,          // drops / s
@@ -27,17 +27,17 @@ export const B = {
   // boost). walls: guard-wall duration. upgCost: shop price multiplier. regen: coin regeneration cap. rocks: falling-rock interval [s].
   difficulty: {
     easy: { slot: 1.2, gate: 1.25, item: 1.4, outZone: 0, upgCost: 0.8, xp: 1, jp: 1, gem: 1, walls: 1.2, regen: 1.5, rocks: null,
-      bossHp: 0.6, bossTime: 90, bossAtk: 1.3, bossReward: 0.8, bossMix: 0, bossEnrage: false, bossRegen: false, bossBarrier: false, color: '#7CFFB2', badge: '' },
+      bossHp: 0.6, bossTime: 90, bossAtk: 1.3, bossReward: 0.8, bossMix: 0, bossEnrage: false, bossRegen: false, bossBarrier: false, bossBeam: 5, color: '#7CFFB2', badge: '' },
     normal: { slot: 0.8, gate: 1, item: 1, outZone: 0, upgCost: 1, xp: 1, jp: 1, gem: 1, walls: 1, regen: 1, rocks: null,
-      bossHp: 1, bossTime: 75, bossAtk: 1, bossReward: 1, bossMix: 0, bossEnrage: false, bossRegen: false, bossBarrier: false, color: '#ffffff', badge: '' },
+      bossHp: 1, bossTime: 75, bossAtk: 1, bossReward: 1, bossMix: 0, bossEnrage: false, bossRegen: false, bossBarrier: false, bossBeam: 6, color: '#ffffff', badge: '' },
     hard: { slot: 0.65, gate: 0.8, item: 0.7, outZone: 0.8, upgCost: 1.15, xp: 1.1, jp: 1.1, gem: 1.15, walls: 0.9, regen: 1, rocks: null,
-      bossHp: 1.1, bossTime: 72, bossAtk: 0.85, bossReward: 1.2, bossMix: 0, bossEnrage: false, bossRegen: false, bossBarrier: false, color: '#ff9e1b', badge: '' },
+      bossHp: 1.1, bossTime: 72, bossAtk: 0.85, bossReward: 1.2, bossMix: 0, bossEnrage: false, bossRegen: false, bossBarrier: false, bossBeam: 7, color: '#ff9e1b', badge: '' },
     expert: { slot: 0.55, gate: 0.7, item: 0.6, outZone: 1.1, upgCost: 1.3, xp: 1.25, jp: 1.2, gem: 1.35, walls: 0.8, regen: 0.8, rocks: null,
-      bossHp: 1.15, bossTime: 70, bossAtk: 0.7, bossReward: 1.45, bossMix: 1, bossEnrage: true, bossRegen: false, bossBarrier: false, color: '#ffd34d', badge: '達' },
+      bossHp: 1.15, bossTime: 70, bossAtk: 0.7, bossReward: 1.45, bossMix: 1, bossEnrage: true, bossRegen: false, bossBarrier: false, bossBeam: 8, color: '#ffd34d', badge: '達' },
     shura: { slot: 0.47, gate: 0.62, item: 0.5, outZone: 1.8, upgCost: 1.5, xp: 1.45, jp: 1.35, gem: 1.6, walls: 0.7, regen: 0.5, rocks: [180, 300],
-      bossHp: 0.9, bossTime: 66, bossAtk: 0.6, bossReward: 1.75, bossMix: 1, bossEnrage: true, bossRegen: true, bossBarrier: false, color: '#ff2d55', badge: '修' },
+      bossHp: 0.9, bossTime: 66, bossAtk: 0.6, bossReward: 1.75, bossMix: 1, bossEnrage: true, bossRegen: true, bossBarrier: false, bossBeam: 9, color: '#ff2d55', badge: '修' },
     inferno: { slot: 0.4, gate: 0.55, item: 0.42, outZone: 2.7, upgCost: 1.75, xp: 1.7, jp: 1.5, gem: 2.0, walls: 0.6, regen: 0.5, rocks: [120, 220],
-      bossHp: 0.95, bossTime: 62, bossAtk: 0.5, bossReward: 2.1, bossMix: 2, bossEnrage: true, bossRegen: true, bossBarrier: true, color: '#d500f9', badge: '獄' },
+      bossHp: 0.95, bossTime: 62, bossAtk: 0.5, bossReward: 2.1, bossMix: 2, bossEnrage: true, bossRegen: true, bossBarrier: true, bossBeam: 10, color: '#d500f9', badge: '獄' },
   },
   maxShowerPhysical: 120,
 };
@@ -55,9 +55,13 @@ export const BOSS = {
   firstAttack: 8, attackEvery: 14, weakEvery: 16, weakDur: 4, critMult: 5,
   barrierEvery: 22, barrierDur: 4, regenAfter: 5, regenRate: 0.006,
   jamDur: 7, freezeDur: 6, freezeSpeed: 0.5, drain: [2, 6],
+  // every attack is announced warnTime s ahead; jam / freeze cannot be repeated for dur*repeatCd s
+  // after they end; breaking the jam beam (difficulty.bossBeam medal hits) stuns the boss for stunDur s
+  // beamReach: medals within this multiple of the normal gate half-width hit the beam
+  warnTime: 2.5, repeatCd: 1.5, stunDur: 3, beamReach: 1.3,
   retryGauge: 0.5, consolation: 0.3,
   // damage per action
-  dmg: { silver: 1, gold: 4, rainbow: 15, big: 20, gate: 4, slot: 25, ball: 60, item: 12, grab: 2, rock: 40, combo: 0.5 },
+  dmg: { silver: 1, gold: 4, rainbow: 15, big: 20, gate: 4, slot: 25, ball: 60, item: 12, grab: 4, rock: 40, combo: 0.5, beam: 30 },
 };
 export const BOSS_TYPES = [
   { id: 'golem', atk: 'rock' }, { id: 'dragon', atk: 'jam' }, { id: 'kraken', atk: 'drain' }, { id: 'phantom', atk: 'freeze' },
@@ -217,24 +221,31 @@ export const WHEEL = [
 ];
 // Medal tower (event / wheel): stacked medals dropped onto the pusher shelf
 export const COIN_TOWER = { coins: 10, gold: 2 };
-// Ball coaster switch: where a JP ball goes (jp/chance weights grow with the luck upgrades)
-export const COASTER_ROUTES = [{ id: 'field', w: 60 }, { id: 'chance', w: 32 }, { id: 'jp', w: 8 }];
+// Ball coaster switch: where a JP ball goes (super/premium weights grow with the luck upgrades).
+// field: dropped onto the table (croon from stage 1 once pushed off); super: straight to the croon
+// from stage 2; premium: straight to the final stage. startStage = croon stage the route starts at.
+export const COASTER_ROUTES = [{ id: 'field', w: 72, startStage: 0 }, { id: 'super', w: 22, startStage: 1 }, { id: 'premium', w: 6, startStage: 2 }];
+export const routeStart = id => (COASTER_ROUTES.find(r => r.id === id) || COASTER_ROUTES[0]).startStage;
 // Crane chance: max medals the claw can hold, chance per medal to slip while lifting
-export const CRANE_PLAY = { maxGrab: 15, slip: 0.3 };
+// prizes: what a crane chance puts on the field (glowing targets, sure items); payMult: medals
+// carried to the prize chute pay this multiple (the extra is credited on the drop)
+export const CRANE_PLAY = { maxGrab: 15, slip: 0.2, payMult: 2, prizes: [1, 2],
+  prizeTable: [{ kind: 'token', extra: 'FEVER', w: 2 }, { kind: 'ball', w: 2 }, { kind: 'token', extra: 'DOUBLE', w: 3 }, { kind: 'token', extra: 'DICE', w: 3 }, { kind: 'token', extra: 'STOCK', w: 3 }, { kind: 'chest', w: 3 }, { kind: 'rainbow', w: 2 }] };
 export const EVENT_INTERVAL = [200, 400];   // seconds
 export const POCKET_CYCLE = { closed: 35, open: 6 };
 export const BONUS_ZONE = { half: 1.0, period: 7, mult: 2, stockChance: 0.12 };
 
-// Ball coaster exits: where a JP ball enters the main table (field = side ramp just in front of
-// the pusher, chance = lane near the front edge). pushMax = current max pusher front z.
-export const BALL_EXIT = {
-  field: { dx: 2.2, y: 1.9, z: 1.9, v: [4.5, 6.5] },
-  chance: { dx: 2.2, y: 1.9, z: 3.2, v: [3.5, 6.0] },
-};
-export function ballExit(route, pushMax, rand = Math.random) {
-  const R = (a, b) => a + rand() * (b - a);
-  const W = L.halfW;
-  const ex = BALL_EXIT[route] || BALL_EXIT.field;
-  const z = Math.max(ex.z, pushMax + 0.9);
-  return { x: W - ex.dx, y: ex.y, z, v: { x: -R(ex.v[0], ex.v[1]), y: -1, z: R(0, 0.5) } };
+// Special drops (big / rainbow / giant medals, items, JP balls) land a little off the middle of
+// the table: |x| in [lo, hi] * halfW on a random side (the ends feed the gutters / OUT zones).
+export const OFF_CENTER = { lo: 0.15, hi: 0.45 };
+export function offCenterX(rand = Math.random, lo = OFF_CENTER.lo, hi = OFF_CENTER.hi) {
+  return (rand() < 0.5 ? -1 : 1) * (lo + rand() * (hi - lo)) * L.halfW;
+}
+// overhead field rail of the ball coaster: z of the rail (in front of the longest pusher stroke)
+// and how far left it reaches (a bit past the leftmost drop point)
+export const fieldRailZ = () => 1.9;
+export const fieldRailReach = W => OFF_CENTER.hi * W + 0.8;
+// where a field JP ball enters the physics (falls from the rail at x). pushMax = max pusher front z.
+export function ballExit(x, pushMax) {
+  return { x, y: 4.0, z: Math.max(fieldRailZ(), pushMax + 0.9), v: { x: -0.4, y: -1, z: 0.3 } };
 }

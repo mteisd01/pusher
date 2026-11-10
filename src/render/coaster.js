@@ -1,20 +1,22 @@
 // Ball coaster: a chrome twin-rail track on the right side deck of the cabinet. A JP ball
 // leaves a gate behind the LED pole, runs switchbacks, a vertical loop and a double spiral,
-// and a 3-way switch sends it into the field, to the chance lane near the front edge or
-// straight to the jackpot tower. The run follows the track with energy-conserving speed
+// and a 3-way switch sends it onto the overhead field rail (it drops through a trap door a
+// little off the middle of the table), into the SUPER funnel (croon from stage 2) or the
+// PREMIUM funnel (croon from the final stage). The run follows the track with energy-conserving speed
 // (gravity along the slope, rolling friction, a minimum speed) so it always completes;
 // at the exit the ball is handed to the real physics with the track velocity.
 import * as THREE from 'three';
 import { L } from '../core/layout.js';
 import { makeBallTexture } from './textures.js';
-import { BALL_EXIT } from '../game/balance.js';
+import { fieldRailZ, fieldRailReach } from '../game/balance.js';
 
 const G = 16;            // track gravity (visual pace)
 const BALL_R = 0.6;
 const GAUGE = 0.17;      // half distance between the rails
 const DROP = 0.5;        // rails sit this far below the ball centre (ball radius projection)
-export const ROUTES = ['field', 'chance', 'jp'];
-const ROUTE_COLOR = { field: 0x4fc3ff, chance: 0xff4fd8, jp: 0xffd34d };
+export const ROUTES = ['field', 'super', 'premium'];
+const ROUTE_COLOR = { field: 0x4fc3ff, super: 0xc070ff, premium: 0xffd34d };
+const FUNNEL_ROUTES = ['super', 'premium'];
 
 // side vectors (horizontal-ish, continuous) and rail normals along a sampled curve
 function frames(pts) {
@@ -83,14 +85,12 @@ export class BallCoaster {
     const W = this.W, X = this.xc, v = (x, y, z) => new THREE.Vector3(x, y, z);
     const s = v(X, 4.85, -0.1);
     if (route === 'field') {
-      const e = BALL_EXIT.field, z = Math.max(e.z, L.sideWallEnd + 0.7);
-      return [s, v(X - 0.4, 4.75, 0.5), v(X - 1.0, 4.62, z - 0.3), v(Math.min(X - 1.2, W + 1.2), 4.45, z), v(W - 0.4, 2.9, z), v(W - e.dx, e.y, z)];
+      // overhead rail across the front of the table; the ball drops at the chosen x (trap door)
+      const z = fieldRailZ(), xl = -fieldRailReach(W);
+      return [s, v(X - 0.4, 4.75, 0.5), v(X - 0.95, 4.66, z - 0.35), v(Math.min(X - 1.3, W + 1.0), 4.58, z), v(W - 0.5, 4.5, z), v(0, 4.36, z), v(xl, 4.22, z)];
     }
-    if (route === 'chance') {
-      const e = BALL_EXIT.chance, z = e.z;
-      return [s, v(X + 0.15, 4.75, 0.8), v(X + 0.2, 4.62, z - 1.2), v(X - 0.3, 4.55, z - 0.5), v(X - 1.1, 4.5, z), v(Math.min(X - 1.3, W + 1.2), 4.42, z), v(W - 0.5, 2.8, z), v(W - e.dx, e.y, z)];
-    }
-    // jp: short drop into a lit funnel right after the switch
+    if (route === 'super') return [s, v(X + 0.45, 4.75, -0.45), v(X + 0.8, 4.6, -0.75)];
+    // premium: short drop into the gold funnel right after the switch
     return [s, v(X + 0.55, 4.75, 0.3), v(X + 0.85, 4.6, 0.55)];
   }
 
@@ -145,7 +145,19 @@ export class BallCoaster {
     }
     const col = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.12, 6.0 - deckY, 12), postMat);
     col.position.set(this.xc, (6.0 + deckY) / 2, -2.0); this.group.add(col);
-    for (const r of ['field', 'chance']) { const t = this.tails[r]; addPost(t.pts[Math.round(t.pts.length * 0.35)], t.fr[Math.round(t.pts.length * 0.35)]); }
+    { const t = this.tails.field, i = Math.round(t.pts.length * 0.12); addPost(t.pts[i], t.fr[i]); }
+    // the overhead field rail hangs from the cabinet top on thin rods (kept out of the field)
+    const fp = this.tails.field.pts;
+    for (const k of [0.45, 0.75, 1]) {
+      const p = fp[Math.min(fp.length - 1, Math.round((fp.length - 1) * k))];
+      const h = 9.6 - p.y; const m = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, h, 6), postMat);
+      m.position.set(p.x, p.y + h / 2 - 0.3, p.z); this.group.add(m);
+    }
+    // trap door marker that slides along the field rail to where the ball will drop
+    this.doorMat = new THREE.MeshBasicMaterial({ color: ROUTE_COLOR.field, toneMapped: false, transparent: true, opacity: 0 });
+    this.door = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.06, 8, 24), this.doorMat);
+    this.door.rotation.x = Math.PI / 2; this.door.position.set(0, fp[fp.length - 1].y - 0.55, fieldRailZ());
+    this.group.add(this.door);
     // start gate box with a lamp
     const gate = new THREE.Group();
     const box = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.9, 0.9), new THREE.MeshPhysicalMaterial({ color: 0x15151a, metalness: 0.6, roughness: 0.3, clearcoat: 1 }));
@@ -173,13 +185,17 @@ export class BallCoaster {
     const spost = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, sw.y - 0.75 - deckY, 10), postMat);
     spost.position.set(sw.x, (sw.y - 0.75 + deckY) / 2, sw.z);
     this.group.add(this.switchG, spost);
-    // JP funnel at the end of the jp branch
-    const je = this.tails.jp.pts[this.tails.jp.pts.length - 1];
-    this.funnelMat = new THREE.MeshPhysicalMaterial({ color: 0xffd34d, metalness: 1, roughness: 0.2, emissive: 0xffa000, emissiveIntensity: 0.1, side: THREE.DoubleSide });
-    const funnel = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.22, 0.5, 24, 1, true), this.funnelMat);
-    funnel.position.set(je.x, je.y - 0.7, je.z); this.group.add(funnel);
-    const fpost = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, je.y - 0.95 - deckY, 12), postMat);
-    fpost.position.set(je.x, (je.y - 0.95 + deckY) / 2, je.z); this.group.add(fpost);
+    // SUPER / PREMIUM funnels at the end of the short branches (straight to the croon tower)
+    this.funnelMats = {};
+    for (const r of FUNNEL_ROUTES) {
+      const je = this.tails[r].pts[this.tails[r].pts.length - 1];
+      const mat = new THREE.MeshPhysicalMaterial({ color: ROUTE_COLOR[r], metalness: 1, roughness: 0.2, emissive: ROUTE_COLOR[r], emissiveIntensity: 0.1, side: THREE.DoubleSide });
+      const funnel = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.22, 0.5, 24, 1, true), mat);
+      funnel.position.set(je.x, je.y - 0.7, je.z); this.group.add(funnel);
+      const fpost = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, je.y - 0.95 - deckY, 12), postMat);
+      fpost.position.set(je.x, (je.y - 0.95 + deckY) / 2, je.z); this.group.add(fpost);
+      this.funnelMats[r] = mat;
+    }
     // chasing LED dots along the common track
     const n = Math.floor(this.common.len / 0.7);
     this.leds = new THREE.InstancedMesh(new THREE.SphereGeometry(0.05, 8, 6), new THREE.MeshBasicMaterial({ toneMapped: false }), n);
@@ -199,8 +215,9 @@ export class BallCoaster {
 
   get busy() { return !!this.run || this.queue.length > 0; }
 
-  // queue a ball; route chosen by the game. onExit(route, pos, vel) when it leaves the track
-  launch(route, onExit) { this.queue.push({ route, onExit }); }
+  // queue a ball; route chosen by the game. onExit(route, pos, vel) when it leaves the track.
+  // dropX: where a field ball falls through the trap door of the overhead rail
+  launch(route, onExit, dropX = 0) { this.queue.push({ route, onExit, dropX }); }
 
   _start(q) {
     this.run = { ...q, path: this.common, s: 0, v: 1.2, phase: 'gate', t: 0, spin: 0, lastTie: 0 };
@@ -232,9 +249,13 @@ export class BallCoaster {
       else if (r && r.path !== this.common) l = rt === r.route ? 0.5 + 0.25 * Math.sin(this.t * 20) : 0.1;
       this.routeLamps[rt].color.setHex(ROUTE_COLOR[rt]).multiplyScalar(l * 2);
     });
-    const flapTarget = r && r.path !== this.common ? { field: -0.6, chance: 0.0, jp: 0.6 }[r.route] : Math.sin(this.t * 0.7) * 0.6;
+    const flapTarget = r && r.path !== this.common ? { field: -0.6, super: 0.0, premium: 0.6 }[r.route] : Math.sin(this.t * 0.7) * 0.6;
     this.flap.rotation.y += (flapTarget - this.flap.rotation.y) * Math.min(1, dt * 10);
-    this.funnelMat.emissiveIntensity = r && r.route === 'jp' && r.path !== this.common ? 1.2 + Math.sin(this.t * 25) * 0.4 : 0.1;
+    for (const fr of FUNNEL_ROUTES) this.funnelMats[fr].emissiveIntensity = r && r.route === fr && r.path !== this.common ? 1.2 + Math.sin(this.t * 25) * 0.4 : 0.1;
+    // trap door marker: shows where a field ball will drop
+    const showDoor = r && r.route === 'field' && r.path !== this.common;
+    if (showDoor) this.door.position.x = r.dropX;
+    this.doorMat.opacity = showDoor ? 0.6 + 0.4 * Math.sin(this.t * 18) : 0;
     if (!r) { this.ballLight.intensity = 0; return; }
     r.t += dt; r.dt = dt;
     if (r.phase === 'gate') { if (r.t > 0.6) r.phase = 'run'; else { this._place(r); return; } }
@@ -251,13 +272,18 @@ export class BallCoaster {
       const slope = (P.pts[i + 1].y - P.pts[i].y) / P.ds;     // dy/ds
       r.v += (-G * slope - 0.6 - 0.02 * r.v * r.v) * h;
       // the loop needs speed at the top; a real track would be designed for it
-      r.v = Math.max(r.v, 1.6);
+      r.v = Math.max(r.v, P === this.tails.field ? 3.2 : 1.6);
       r.s += r.v * h;
+      // field rail: the trap door opens at the chosen x
+      if (P === this.tails.field && r.s > P.len * 0.2) {
+        const j = Math.min(P.pts.length - 1, Math.floor(r.s / P.ds));
+        if (P.pts[j].x <= r.dropX || j >= P.pts.length - 1) { r.s = j * P.ds; this._place(r); this._exit(); return; }
+      }
       if (r.s >= P.len) {
         if (P === this.common) {
           r.path = this.tails[r.route]; r.s -= P.len;
           this.audio.reelTick && this.audio.reelTick();
-          this.audio.bell && this.audio.bell(r.route === 'jp' ? 1568 : 1046, 0.35, 0.05);
+          this.audio.bell && this.audio.bell(r.route === 'premium' ? 1568 : r.route === 'super' ? 1318 : 1046, 0.35, 0.05);
         } else { this._exit(); return; }
       }
     }
@@ -280,17 +306,16 @@ export class BallCoaster {
 
   _exit() {
     const r = this.run, P = r.path;
-    if (r.route === 'jp') {
+    if (r.route !== 'field') {
       r.phase = 'funnel'; r.t = 0;
       this.audio.croonStop && this.audio.croonStop();
       this.audio.croonHole && this.audio.croonHole(true);
       return;
     }
-    const n = P.pts.length, a = P.pts[n - 2], b = P.pts[n - 1];
-    const dir = b.clone().sub(a).normalize();
-    const v = Math.min(5, r.v);
+    // field: the ball falls straight through the trap door (small sideways speed so it stays off the gutters)
+    const b = this.ball.position;
     this.audio.croonStop && this.audio.croonStop();
-    r.onExit && r.onExit(r.route, { x: b.x, y: b.y, z: b.z }, { x: dir.x * v, y: dir.y * v, z: dir.z * v });
+    r.onExit && r.onExit(r.route, { x: b.x, y: b.y - 0.2, z: b.z }, { x: -0.4, y: -1, z: 0.3 });
     this.ball.visible = false;
     this.run = null;
     this.ballLight.intensity = 0;

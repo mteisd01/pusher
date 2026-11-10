@@ -219,7 +219,8 @@ export class Backboard {
     if (fx.double > 0) right.push(['×2', '#c38bff', 30], [`${Math.ceil(fx.double)}s`, '#fff', 30]);
     if (fx.magnet > 0) right.push(['MAGNET', '#ff6b6b', 20], [`${Math.ceil(fx.magnet)}s`, '#fff', 30]);
     if (st.bossGauge >= 0 && !st.boss && right.length < 4) right.push(['BOSS', '#ff6e6e', 22], [`${Math.floor(st.bossGauge * 100)}%`, st.bossGauge > 0.85 && Math.floor(t * 3) % 2 ? '#ff5252' : '#fff', 30]);
-    if (st.jam > 0) left.unshift(['JAM', '#ff6e40'], [`${Math.ceil(st.jam)}s`, '#fff', 30]);
+    if (st.jam > 0) left.unshift(['BEAM', '#ff6e40', 22], [`${st.beamHp}/${st.beamMax}`, '#fff', 30]);
+    if (st.warn) left.unshift(['WARN', '#ffab40', 20], [`${Math.ceil(st.warn.t)}`, Math.floor(t * 6) % 2 ? '#ffab40' : '#fff', 30]);
     if (st.freeze > 0) left.unshift(['FREEZE', '#80d8ff', 20], [`${Math.ceil(st.freeze)}s`, '#fff', 30]);
         if (st.wheelMeter >= 0 && right.length < 4) right.push(['WHEEL', '#7CFFB2', 22], [`${Math.min(st.wheelMeter, st.wheelNeed)}/${st.wheelNeed}`, '#7CFFB2', 30]);
     if (st.event) {

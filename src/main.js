@@ -7,7 +7,7 @@ import { CraneRig } from './render/crane.js';
 import { FieldDevices } from './render/fieldDevices.js';
 import { Plinko3D } from './render/plinko3d.js';
 import { BossView } from './render/boss3d.js';
-import { WHEEL, WHEEL_NEED, PLINKO, diffDef } from './game/balance.js';
+import { WHEEL, WHEEL_NEED, PLINKO, diffDef, BOSS } from './game/balance.js';
 import { CUP, PACK_HEAD } from './core/layout.js';
 import { TRAY, POLE_X } from './render/cabinet.js';
 import { CoinRenderer } from './render/coins.js';
@@ -62,7 +62,9 @@ async function boot() {
   const effects = new Effects(stage.scene);
   effects.amount = s.particles;
   const audio = new AudioSys();
-  audio.setVolume({ master: s.master, bgm: s.bgm, se: s.se });
+  // ?mute=1: silent session for testing (the saved volume is left alone)
+  const forceMute = new URLSearchParams(location.search).has('mute');
+  audio.setVolume({ master: forceMute ? 0 : s.master, bgm: s.bgm, se: s.se });
   audio.setStyle(theme.bgm);
   setLoad(t('loading'), 0.5);
   await nextFrame();
@@ -158,7 +160,7 @@ async function boot() {
         stage.applyQuality(st); coins.setShadows(!!st.shadows, st.coinDetail === 'high' || st.coinDetail === 'ultra'); break;
       case 'particles': effects.amount = st.particles; break;
       case 'physHz': physics.cmd('hz', st.physHz); break;
-      case 'master': case 'bgm': case 'se': audio.setVolume({ master: st.master, bgm: st.bgm, se: st.se }); break;
+      case 'master': case 'bgm': case 'se': audio.setVolume({ master: forceMute ? 0 : st.master, bgm: st.bgm, se: st.se }); break;
       case 'theme': { const th = themeById(st.theme); stage.setTheme(th); audio.setStyle(th.bgm); break; }
       case 'leftHand': case 'highContrast': case 'reduceMotion': case 'uiScale': case 'dropButton': case 'showFps': ui.applyLayout(); break;
       case 'f_missions': game.prog.ensureMissions(); break;
@@ -242,9 +244,24 @@ async function boot() {
   canvas.addEventListener('pointercancel', up);
   canvas.addEventListener('wheel', e => { e.preventDefault(); stage.userZoom = Math.max(-2, Math.min(4, stage.userZoom - Math.sign(e.deltaY) * 0.25)); stage.fitCamera(); }, { passive: false });
   canvas.addEventListener('contextmenu', e => e.preventDefault());
+  // browser behaviour that gets in the way of a game: the right-click menu anywhere (JP roulette,
+  // croon, mini games, HUD), middle-click auto-scroll, dragging, Ctrl+wheel page zoom, double-click
+  // selection. Text fields keep their own menu.
+  const editable = el => !!(el && el.closest && el.closest('input, textarea, select, [contenteditable="true"]'));
+  document.addEventListener('contextmenu', e => { if (!editable(e.target)) e.preventDefault(); });
+  document.addEventListener('mousedown', e => { if (e.button === 1) e.preventDefault(); });
+  document.addEventListener('auxclick', e => { if (e.button === 1) e.preventDefault(); });
+  document.addEventListener('dragstart', e => { if (!editable(e.target)) e.preventDefault(); });
+  document.addEventListener('selectstart', e => { if (!editable(e.target) && !(e.target.closest && e.target.closest('.body'))) e.preventDefault(); });
+  document.addEventListener('dblclick', e => { if (!editable(e.target)) e.preventDefault(); });
+  window.addEventListener('wheel', e => { if (e.ctrlKey) e.preventDefault(); }, { passive: false });
+  // a clicked HUD button must not keep the focus (Space / Enter would press it again instead of dropping)
+  document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('button'); if (b && !ui.isOpen()) b.blur(); }, true);
   const keys = {};
   window.addEventListener('keydown', e => {
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+    // Space / Enter on a focused HUD button would click it: drop instead
+    if ((e.code === 'Space' || e.code === 'Enter') && e.target.tagName === 'BUTTON' && !ui.isOpen()) { e.preventDefault(); e.target.blur(); }
     audio.unlock();
     if (e.code === 'Escape') { if (game.pauseReasons.has('user') && !ui.isOpen()) { ui.togglePause(false); return; } ui.isOpen() ? ui.close() : ui.open('shop'); return; }
     if (e.code === 'KeyP' && !ui.isOpen()) { ui.togglePause(); return; }
@@ -316,14 +333,14 @@ async function boot() {
     stage.update(dt, {
       pusherZ: pz, guardY: gy, lidY, pocketOpen: game.features.pocketOpen, bonusOn: s.f_bonusZone, bonusX: game.features.bonusX, bonusHalf: 1.0,
       launcherX: game.launcherX, showBeam: s.showBeam,
-      gateOn: s.f_slot, gateX: game.gateX, gateHalf: game.gateHalf(), gateFlash: game.gateFlash,
+      gateOn: s.f_slot, gateX: game.gateX, gateHalf: game.boss.jam > 0 ? game.gateHalfRaw() * BOSS.beamReach : game.gateHalf(), gateFlash: game.gateFlash, jamK: game.boss.jam > 0 ? game.boss.beamHp / Math.max(1, game.boss.beamMax) : 0,
       lightMode: game.lightMode(), payoutFlash: game.payoutFlash > 0.1 ? game.payoutFlash : 0,
     });
     backboard.update(dt, {
       slot: game.slot, slotOn: s.f_slot, jpOn: s.f_jp, jpPool: save.jpPool, stock: save.stock, stockMax: game.stockMax(),
       fever: game.fx.fever > 0, effects: game.fx, combo: game.combo, theme: game.theme(), event: game.features.event,
       mech: !!(s.f_mechReels && s.f_slot), wheelMeter: s.f_wheel ? (save.wheelMeter || 0) : -1, wheelNeed: WHEEL_NEED,
-      boss: game.boss.active, bossGauge: s.f_boss ? game.boss.gaugeFrac() : -1, bossStage: game.boss.stage(), jam: game.boss.jam, freeze: game.boss.freeze,
+      boss: game.boss.active, bossGauge: s.f_boss ? game.boss.gaugeFrac() : -1, bossStage: game.boss.stage(), jam: game.boss.jam, freeze: game.boss.freeze, beamHp: game.boss.beamHp, beamMax: game.boss.beamMax, warn: game.boss.warn,
     });
     if (!paused) effects.update(dt);
     coins.updateTray(paused ? 0 : dt);
@@ -346,7 +363,7 @@ async function boot() {
       M.coaster.update(dt);
       M.crane.group.visible = !!s.f_crane;
       if (s.f_crane) M.crane.update(dt, [dev[0], dev[1], dev[2], dev[3]], dev[9] > 0);
-      M.field.update(dt, { kickZ: dev[4], kickX: dev[5], ttAngle: dev[6], flipL: dev[7], flipR: dev[8], ttOn: game.ttSent, tt: !!s.f_turntable, flip: !!s.f_flipper, meter: save.wheelMeter || 0, meterOn: !!(s.f_meterTube && s.f_wheel && s.f_catcher) }, {});
+      M.field.update(dt, { kickZ: dev[4], kickX: dev[5], ttAngle: dev[6], flipL: dev[7], flipR: dev[8], ttOn: game.ttSent, tt: !!s.f_turntable, flip: !!s.f_flipper, flipOn: !!game.flipSent, meter: save.wheelMeter || 0, meterOn: !!(s.f_meterTube && s.f_wheel && s.f_catcher) }, {});
       game.plinko3d.update(dt);
     }
     stage.render();

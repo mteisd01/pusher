@@ -215,15 +215,23 @@ export class PusherPhysics {
         break;
       case 'up':
         c.y = mv(c.y, CRANE.idleY, 3);
-        if (c.y >= CRANE.idleY - 1e-3) { c.phase = 'carry'; c.t = 0; c.dropX = Math.max(-(L.halfW - 1.5), Math.min(L.halfW - 1.5, c.x)); }
+        if (c.y >= CRANE.idleY - 1e-3) {
+          // carry the prize over the front edge (prize chute above the payout tray), clear of the OUT zones
+          const lim = L.halfW - (this.outZone || 0) - 1.2;
+          c.phase = 'carry'; c.t = 0; c.dropX = Math.max(-lim, Math.min(lim, c.x));
+        }
         break;
       case 'carry':
-        c.x = mv(c.x, c.dropX, 5); c.z = mv(c.z, L.frontZ - 1.4, 5);
-        if (Math.abs(c.z - (L.frontZ - 1.4)) < 1e-3 && Math.abs(c.x - c.dropX) < 1e-3) { c.phase = 'open'; c.t = 0; }
+        c.x = mv(c.x, c.dropX, 5); c.z = mv(c.z, CRANE.chuteZ, 5);
+        if (Math.abs(c.z - CRANE.chuteZ) < 1e-3 && Math.abs(c.x - c.dropX) < 1e-3) { c.phase = 'open'; c.t = 0; }
         break;
       case 'open':
         c.claw = Math.max(0, c.claw - h / 0.3);
-        if (c.claw < 0.6 && c.grabbed.length) { for (const o of c.grabbed) this._release(o, { x: 0, y: -1, z: 0.6 }); c.grabbed.length = 0; ev.push({ t: 'crane', ph: 'drop', x: c.x }); }
+        if (c.claw < 0.6 && c.grabbed.length) {
+          const kinds = c.grabbed.filter(o => !o.dead).map(o => o.kind);
+          for (const o of c.grabbed) this._release(o, { x: 0, y: -2, z: 0.4 });
+          c.grabbed.length = 0; ev.push({ t: 'crane', ph: 'drop', x: c.x, kinds });
+        }
         if (c.claw <= 0 && c.t > 0.8) { c.phase = 'return'; c.t = 0; }
         break;
       case 'return': {
@@ -290,10 +298,20 @@ export class PusherPhysics {
       const ph = this.flipT % FLIPPER.period;
       let a;
       if (!this.flipOn) a = FLIPPER.rest;
-      else if (ph < 0.2) a = FLIPPER.rest + (FLIPPER.kick - FLIPPER.rest) * Math.sin(ph / 0.2 * Math.PI / 2);
-      else if (ph < 0.75) a = FLIPPER.kick - (FLIPPER.kick - FLIPPER.rest) * (ph - 0.2) / 0.55;
+      else if (ph < FLIPPER.swing) a = FLIPPER.rest + (FLIPPER.kick - FLIPPER.rest) * Math.sin(ph / FLIPPER.swing * Math.PI / 2);
+      else if (ph < 0.65) a = FLIPPER.kick - (FLIPPER.kick - FLIPPER.rest) * (ph - FLIPPER.swing) / (0.65 - FLIPPER.swing);
       else a = FLIPPER.rest;
-      if (ph < h && this.flipOn) ev.push({ t: 'flip' });
+      if (ph < h && this.flipOn) {
+        // medals lying on a flipper when it kicks are knocked back from the gutter: count them
+        let n = 0;
+        for (const f of this.flippers) for (const o of this.objs) {
+          if (o.kind > KIND.BIG && o.kind !== KIND.GEM && o.kind !== KIND.CHEST && o.kind !== KIND.TOKEN) continue;
+          const rx = o.x - f.px, rz = o.z - f.pz, dx = -f.side * Math.sin(f.a), dz = Math.cos(f.a);
+          const along = rx * dx + rz * dz, across = Math.abs(rx * dz - rz * dx);
+          if (along > 0 && along < FLIPPER.len && across < 0.75 && o.y < 1.2) n++;
+        }
+        ev.push({ t: 'flip', n });
+      }
       for (const f of this.flippers) { f.a = !this.flipOn ? f.a + Math.sign(FLIPPER.rest - f.a) * Math.min(Math.abs(FLIPPER.rest - f.a), h * 3) : a; this._placeFlipper(f); }
     }
     this._craneStep(h, ev);

@@ -7,6 +7,7 @@ import { ACHIEVEMENTS } from '../game/progression.js';
 import { THEMES } from '../render/themes.js';
 import { GEM_COLORS, TOKEN_STYLE, MEDAL_SKINS } from '../render/coins.js';
 import { exportCode, importCode, readBackup } from '../save.js';
+import { INFO, INFO_CATS, INFO_CAT_NAME, infoText } from '../game/info.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const h = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html !== undefined) e.innerHTML = html; return e; };
@@ -74,6 +75,8 @@ export class UI {
     r.appendChild(this.hud);
     this.toasts = h('div', 'toasts'); r.appendChild(this.toasts);
     this.bannerEl = h('div', 'banner'); r.appendChild(this.bannerEl);
+    this.bannerSub = h('div', 'banner-sub'); r.appendChild(this.bannerSub);
+    this.infoEl = h('div', 'infocard hidden'); r.appendChild(this.infoEl);
     this.popLayer = h('div', 'pops'); r.appendChild(this.popLayer);
     this.hintEl = h('div', 'hint hidden'); r.appendChild(this.hintEl);
     this.modal = h('div', 'modal hidden');
@@ -166,20 +169,36 @@ export class UI {
     // fx chips
     const chips = [];
     const fx = g.fx;
-    if (fx.fever > 0) chips.push(`<span class="chip fever">FEVER ${Math.ceil(fx.fever)}</span>`);
-    if (fx.walls > 0) chips.push(`<span class="chip wall">🛡 ${Math.ceil(fx.walls)}</span>`);
-    if (fx.turbo > 0) chips.push(`<span class="chip turbo">≫ ${Math.ceil(fx.turbo)}</span>`);
-    if (fx.double > 0) chips.push(`<span class="chip dbl">×2 ${Math.ceil(fx.double)}</span>`);
+    // timed chips carry a bar of the remaining time (relative to the longest value seen this run)
+    const fm = this._fxMax || (this._fxMax = {});
+    const stop = g.timeStopped() ? ' ⏸' : '';
+    const timed = (k, v, cls, label) => {
+      if (!(v > 0)) { fm[k] = 0; return; }
+      if (v > (fm[k] || 0)) fm[k] = v;
+      const p = Math.round(v / fm[k] * 100);
+      chips.push(`<span class="chip ${cls} timed" style="--p:${p}%">${label} ${Math.ceil(v)}${stop}</span>`);
+    };
+    timed('fever', fx.fever, 'fever', '🔥FEVER');
+    timed('walls', fx.walls, 'wall', '🛡');
+    timed('turbo', fx.turbo, 'turbo', '≫');
+    timed('double', fx.double, 'dbl', '×2');
+    timed('magnet', fx.magnet, 'turbo', '🧲');
+    timed('flipper', g.settings.f_flipper ? fx.flipper : 0, 'wall', '🏓');
     if (g.settings.f_slot) chips.push(`<span class="chip stock">${t('stock')} ${s.stock}/${g.stockMax()}</span>`);
     if (g.settings.f_jp) chips.push(`<span class="chip jp">JP ${fmt(s.jpPool)}</span>`);
-    if (fx.magnet > 0) chips.push(`<span class="chip turbo">MAG ${Math.ceil(fx.magnet)}</span>`);
     if (g.settings.f_sugoroku) chips.push(`<span class="chip road">🎲${s.dice || 0} · ${(s.roadPos || 0)}/24</span>`);
     const ev = g.features.event;
-    if (ev) chips.push(`<span class="chip fever">${t('ev_' + ev.id)} ${Math.ceil(ev.t)}${ev.id === 'challenge' ? ` · ${ev.progress || 0}/${ev.target}` : ''}</span>`);
+    if (ev) timed('ev_' + ev.id, ev.t, 'fever', `${t('ev_' + ev.id)}${ev.id === 'challenge' ? ` ${ev.progress || 0}/${ev.target}` : ''}`);
     if (g.features.pocketOpen) chips.push(`<span class="chip combo">POCKET</span>`);
+    const held = g.features.held();
+    if (held.length) chips.push(`<span class="chip hold">🎟 ${t('held')}: ${held.map(k => t('held_' + k)).join('・')}</span>`);
     const ba = g.boss.active;
-    if (ba) chips.push(`<span class="chip fever">BOSS ${Math.max(0, Math.ceil(ba.hp / ba.hpMax * 100))}% · ${Math.ceil(ba.t)}s</span>`);
-    else if (g.settings.f_boss) chips.push(`<span class="chip boss">BOSS ${Math.floor(g.boss.gaugeFrac() * 100)}%</span>`);
+    if (ba) {
+      chips.push(`<span class="chip fever timed" style="--p:${Math.max(0, Math.round(ba.hp / ba.hpMax * 100))}%">BOSS ${Math.max(0, Math.ceil(ba.hp / ba.hpMax * 100))}% · ${Math.ceil(ba.t)}s${stop}</span>`);
+      if (g.boss.warn) chips.push(`<span class="chip warn">⚠ ${t('batkName_' + g.boss.warn.kind)} ${Math.ceil(g.boss.warn.t)}</span>`);
+      if (g.boss.jam > 0) chips.push(`<span class="chip warn timed" style="--p:${Math.round(g.boss.beamHp / Math.max(1, g.boss.beamMax) * 100)}%">🚫 BEAM ${g.boss.beamHp}/${g.boss.beamMax}</span>`);
+      if (g.boss.stun > 0) chips.push(`<span class="chip combo">STUN ${Math.ceil(g.boss.stun)}</span>`);
+    } else if (g.settings.f_boss) chips.push(`<span class="chip boss">BOSS ${Math.floor(g.boss.gaugeFrac() * 100)}%</span>`);
     const html = chips.join('');
     if (html !== this._chips) { $('#hFx', this.hud).innerHTML = html; this._chips = html; }
     const ms = s.missions;
@@ -224,13 +243,28 @@ export class UI {
   achievement(a) {
     this.toast(a.icon, `${t('achieved')}: ${this.achName(a)} +${a.reward}`);
   }
-  banner(text, color = '#fff', dur = 1.6) {
+  // sub: one plain line under the banner that says what the thing does (kept a little longer)
+  banner(text, color = '#fff', dur = 1.6, sub = '') {
     const e = this.bannerEl;
     e.textContent = text;
     e.className = 'banner show' + (color === 'rainbow' ? ' rainbow' : '');
     e.style.color = color === 'rainbow' ? '' : color;
     clearTimeout(this._bt);
     this._bt = setTimeout(() => { e.className = 'banner'; }, dur * 1000);
+    const sb = this.bannerSub;
+    if (sub) {
+      sb.textContent = sub; sb.className = 'banner-sub show';
+      clearTimeout(this._bst);
+      this._bst = setTimeout(() => { sb.className = 'banner-sub'; }, Math.max(dur, 2.6) * 1000 + 600);
+    } else if (!this._bst || sb.className === 'banner-sub') sb.className = 'banner-sub';
+  }
+  // first time an effect shows up: a card at the side that explains it (does not block input)
+  infoCard(info) {
+    const e = this.infoEl;
+    e.innerHTML = `<div class="ic-h"><span class="ic-i">${esc(info.icon || '')}</span>${esc(info.name)}<span class="ic-new">NEW</span></div><div class="ic-d">${esc(info.desc)}</div>`;
+    e.classList.remove('hidden'); e.classList.remove('out');
+    clearTimeout(this._ict);
+    this._ict = setTimeout(() => { e.classList.add('out'); this._ict = setTimeout(() => e.classList.add('hidden'), 400); }, 7000);
   }
 
   // ---------- hints ----------
@@ -273,7 +307,7 @@ export class UI {
   isOpen() { return !this.modal.classList.contains('hidden') || !this.dialog.classList.contains('hidden'); }
 
   renderTabs() {
-    const tabs = [['shop', t('shop')], ['missions', t('missions')], ['road', t('road')], ['achievements', t('achievements')], ['gems', t('gems')], ['stats', t('stats')], ['themes', t('themes')], ['settings', t('settings')], ['data', t('data')], ['help', t('help')]];
+    const tabs = [['shop', t('shop')], ['missions', t('missions')], ['road', t('road')], ['achievements', t('achievements')], ['gems', t('gems')], ['stats', t('stats')], ['themes', t('themes')], ['settings', t('settings')], ['data', t('data')], ['guide', t('guide')], ['help', t('help')]];
     const el = $('#mTabs', this.modal);
     el.innerHTML = tabs.map(([id, n]) => `<button class="tab ${id === this.tab ? 'on' : ''}" data-t="${id}">${n}</button>`).join('');
     el.querySelectorAll('.tab').forEach(b => b.onclick = () => { this.tab = b.dataset.t; this.game.audio.ui(); this.renderTabs(); this.renderTab(); });
@@ -394,6 +428,20 @@ export class UI {
     const g = this.game, f = g.features, pos = g.save.roadPos || 0;
     body.innerHTML = `<h3>${t('road')} <small>${t('lap')} ${(g.save.roadLap || 0) + 1} · ${t('dice')} ${g.save.dice || 0} · GATE ${g.save.roadGate || 0}/30</small></h3><p class="note">${t('roadInfo')}</p>
       <div class="roadgrid">${f.board().map((s, i) => `<div class="sq ${i === pos ? 'cur' : ''}" style="--c:${s.color}"><small>${i}</small>${esc(f.squareLabel(s))}</div>`).join('')}</div>`;
+  }
+
+  // every effect / item / event explained, generated from the same table as the banners
+  tab_guide(body) {
+    const lang = getLang() === 'en' ? 'en' : 'ja';
+    const seen = this.game.save.seenInfo || {};
+    body.innerHTML = `<p class="note">${t('guideNote')}</p>` + INFO_CATS.map(c => {
+      const ids = Object.keys(INFO).filter(id => INFO[id].cat === c);
+      if (!ids.length) return '';
+      return `<h3>${esc(INFO_CAT_NAME[lang][c])}</h3><div class="guide">${ids.map(id => {
+        const i = infoText(id, '…');
+        return `<div class="gi${seen[id] ? '' : ' unseen'}"><span class="gi-i">${esc(i.icon || '')}</span><b>${esc(i.name)}</b><span>${esc(i.desc)}</span></div>`;
+      }).join('')}</div>`;
+    }).join('');
   }
 
   tab_help(body) {

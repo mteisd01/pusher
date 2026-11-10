@@ -1,13 +1,14 @@
 // Central game orchestrator: input -> physics -> events -> rewards -> presentation
 import * as THREE from 'three';
-import { L, KIND, TOKEN } from '../core/layout.js';
-import { B, ITEM_TABLE, ROULETTE, UPGRADES, upgradeCost, WHEEL, WHEEL_NEED, COIN_TOWER, COASTER_ROUTES, CRANE_PLAY, ballExit, diffDef, ROCK_REWARD, BOSS, DIFF_REWARDS, DIFF_REWARD_STAGE } from './balance.js';
+import { L, KIND, TOKEN, CRANE } from '../core/layout.js';
+import { B, ITEM_TABLE, ROULETTE, UPGRADES, upgradeCost, WHEEL, WHEEL_NEED, COIN_TOWER, COASTER_ROUTES, CRANE_PLAY, ballExit, offCenterX, routeStart, diffDef, ROCK_REWARD, BOSS, DIFF_REWARDS, DIFF_REWARD_STAGE } from './balance.js';
 import { BossSystem } from './boss.js';
 import { Progression } from './progression.js';
 import { Slot } from './slot.js';
 import { Features } from './features.js';
 import { themeById, THEMES } from '../render/themes.js';
 import { t } from '../i18n.js';
+import { infoText, TOKEN_INFO } from './info.js';
 
 const rand = (a, b) => a + Math.random() * (b - a);
 const yawQ = () => { const a = Math.random() * Math.PI * 2; return { x: 0, y: Math.sin(a / 2), z: 0, w: Math.cos(a / 2) }; };
@@ -56,8 +57,15 @@ export class Game {
   get diff() { return diffDef(this.settings.difficulty); }
   upg(id) { return this.prog.upg(id); }
   stockMax() { return B.stockBase + this.upg('stock'); }
-  gateHalf() { return (B.gate.half + B.gate.halfPerLv * this.upg('gate')) * Math.pow(L.halfW / 11, 1.2) * this.diff.gate * (this.fx.fever > 0 ? 1.6 : 1) * this.features.gateMult() * this.boss.gateMult(); }
+  // gate width without the boss jam (the jam beam occupies this width)
+  gateHalfRaw() { return (B.gate.half + B.gate.halfPerLv * this.upg('gate')) * Math.pow(L.halfW / 11, 1.2) * this.diff.gate * (this.fx.fever > 0 ? 1.6 : 1) * this.features.gateMult(); }
+  gateHalf() { return this.gateHalfRaw() * this.boss.gateMult(); }
   get overlayBusy() { return this.features.busy || this.roulette.active || this.jpRunning; }
+  // while a device or lottery holds the input, timed effects (fever, turbo, events, the boss
+  // clock…) stand still so a chance never costs boost time
+  timeStopped() { return !!(this.devMode || this.overlayBusy || (this.tower && this.tower.active)); }
+  // a timed boost is running (interactive chances wait for it to end)
+  boostActive() { return this.fx.fever > 0 || this.fx.turbo > 0 || this.fx.double > 0 || this.features.boostEvent(); }
   slotLuck() { return (1 + 0.06 * this.upg('luck') + this.prog.gemLuck()) * this.diff.slot * (this.fx.fever > 0 ? 1.4 : 1); }
   itemRate() { return (B.itemRate + B.itemRatePerLv * this.upg('item')) * this.diff.item; }
   autoRate() { return B.autoRateBase + B.autoRatePerLv * this.upg('auto'); }
@@ -146,26 +154,37 @@ export class Game {
   spawnItem(kind, extra = 0) {
     if (kind === KIND.BALL) { this.launchBall(); return; }
     if (kind === KIND.GEM && extra === 0) extra = this.prog.rollGem(Math.random, this.diff.gem);
-    this.physics.cmd('spawn', kind, rand(-(L.halfW - 1.5), L.halfW - 1.5), 6.5, rand(L.backWallZ + 1.2, L.pusherFrontMin - 0.8), tiltQ(0.4), { x: 0, y: -1, z: 0 }, extra, 0);
+    // items land on the shelf a little off the middle (not at the ends, where they slide into a gutter)
+    this.physics.cmd('spawn', kind, offCenterX(Math.random, 0.05, 0.5), 6.5, rand(L.backWallZ + 1.2, L.pusherFrontMin - 0.8), tiltQ(0.4), { x: 0, y: -1, z: 0 }, extra, 0);
   }
   // JP balls never start on the shelf (a ball rolls in place on the moving pusher):
   // they come in over the ball coaster, or straight onto the field when it is off.
   launchBall() {
     const co = this.settings.f_coaster && this.machines && this.machines.coaster;
     const route = this.pickBallRoute();
+    const dropX = offCenterX();
+    const toCroon = r => {
+      this.prog.add('items'); this.queueJackpot(routeStart(r));
+      this.backboard.message(r === 'premium' ? 'PREMIUM!!' : 'SUPER!', r === 'premium' ? '#ffd34d' : '#c070ff', 2, 80);
+      this.announce('route_' + r, r === 'premium' ? '#ffd34d' : '#c070ff', 2);
+      r === 'premium' ? this.audio.winBig() : this.audio.itemGet();
+    };
     if (co) {
       co.launch(route, (r, pos, vel) => {
-        if (r === 'jp') { this.prog.add('items'); this.jpQueue++; this.backboard.message('JP DIRECT!', '#ffd34d', 2, 80); this.audio.itemGet(); return; }
+        if (r !== 'field') { toCroon(r); return; }
         this.physics.cmd('spawn', KIND.BALL, pos.x, pos.y, pos.z, null, vel, 0, 0);
         this.objCount++;
-      });
+      }, dropX);
       this.prog.add('coasters');
       return;
     }
-    const e = ballExit(route === 'chance' ? 'chance' : 'field', L.pusherFrontMax + this.upg('stroke') * 0.3);
+    if (route !== 'field') { toCroon(route); return; }
+    const e = ballExit(dropX, L.pusherFrontMax + this.upg('stroke') * 0.3);
     this.physics.cmd('spawn', KIND.BALL, e.x, e.y, e.z, null, e.v, 0, 0);
     this.objCount++;
   }
+  // a JP lottery waits in the queue; startStage: croon stage it starts at (coaster SUPER / PREMIUM)
+  queueJackpot(startStage = 0) { this.jpQueue++; (this.jpStarts || (this.jpStarts = [])).push(startStage); }
   pickBallRoute() {
     const luck = 1 + 0.1 * this.upg('luck') + 0.1 * this.upg('jp');
     const list = COASTER_ROUTES.map(r => ({ ...r, w: r.id === 'field' ? r.w : r.w * luck }));
@@ -177,7 +196,7 @@ export class Game {
   // ---------- crane ----------
   startCrane() {
     if (!this.settings.f_crane) { this.shower(8); return; }
-    this.features.enqueue(() => this.runCrane());
+    this.features.enqueue(() => this.runCrane(), 'crane');
   }
   runCrane() {
     this.devMode = 'crane';
@@ -185,8 +204,22 @@ export class Game {
     this.prog.add('cranes');
     this.physics.cmd('craneStart', CRANE_PLAY.maxGrab, CRANE_PLAY.slip);
     this.physics.cmd('craneAim', this.aimX);
+    // prize capsules: sure items placed on the field in the claw's reach
+    const np = CRANE_PLAY.prizes[0] + Math.floor(Math.random() * (CRANE_PLAY.prizes[1] - CRANE_PLAY.prizes[0] + 1));
+    for (let i = 0; i < np; i++) {
+      const tb = CRANE_PLAY.prizeTable;
+      let r = Math.random() * tb.reduce((a, b) => a + b.w, 0), p = tb[0];
+      for (const it of tb) if ((r -= it.w) < 0) { p = it; break; }
+      if (p.kind === 'ball' && !this.settings.f_jp) p = tb[0];
+      const kind = p.kind === 'ball' ? KIND.BALL : p.kind === 'chest' ? KIND.CHEST : p.kind === 'rainbow' ? KIND.RAINBOW : KIND.TOKEN;
+      const extra = p.kind === 'token' ? TOKEN[p.extra] : 0;
+      const x = offCenterX(Math.random, 0.05, 0.5), z = rand(L.pusherFrontMax + 1.2, CRANE.z1 - 0.2);
+      this.physics.cmd('spawn', kind, x, 3.5, z, null, { x: 0, y: -2, z: 0 }, extra, 0);
+      this.objCount++;
+      setTimeout(() => this.effects.burst(x, 0.6, z, '#ff4fa0', 24, 4, 0.7, 0.9), 400);
+    }
     this.backboard.message('CRANE CHANCE', '#ff4fa0', 2, 80);
-    this.ui.banner(t('craneHint'), '#ff4fa0', 2.4);
+    this.announce('crane', '#ff4fa0', 2.4, [], 'CRANE CHANCE!');
     this.audio.brass && this.audio.brass(0, [64, 67, 72], 0.5, 0.15);
     return new Promise(res => { this._craneDone = res; });
   }
@@ -194,10 +227,16 @@ export class Game {
     if (e.ph === 'close') { this.devMode = 'craneBusy'; this.audio.thump(0, 0.3, 140); }
     else if (e.ph === 'grab') {
       this.prog.add('craneGrabs', e.n);
-      this.boss.damage(e.n * BOSS.dmg.grab, this.aimX);
+      this.boss.damage(e.n * BOSS.dmg.grab + (e.items || 0) * BOSS.dmg.item, this.aimX);
       this.ui.popup(e.n ? `GRAB ×${e.n}` : 'MISS…', this.aimX, 4, 0, e.n ? '#ff4fa0' : '#999', 1.3);
       e.n ? this.audio.gate() : this.audio.lose();
-    } else if (e.ph === 'drop') { this.audio.payout(4, e.x / L.halfW * 0.8, false); this.stage.addShake(0.15); }
+    } else if (e.ph === 'drop') {
+      // the prize chute pays the carried medals again on top of their normal value
+      const v = (e.kinds || []).reduce((a, k) => a + (k <= KIND.BIG || k === KIND.GIANT ? B.value[k] || 0 : 0), 0) * (CRANE_PLAY.payMult - 1);
+      if (v > 0) { this.credit(v, 'crane'); this.ui.popup(`PRIZE ×${CRANE_PLAY.payMult} +${v}`, e.x, 2.5, L.frontZ, '#ff4fa0', 1.6); }
+      this.effects.burst(e.x, 1.2, L.frontZ + 0.4, '#ff4fa0', 30, 5, 0.8, 1);
+      this.audio.payout(4, e.x / L.halfW * 0.8, false); this.stage.addShake(0.15);
+    }
     else if (e.ph === 'done') { this.devMode = null; const r = this._craneDone; this._craneDone = null; r && r(); }
   }
 
@@ -227,13 +266,20 @@ export class Game {
         continue;
       }
       const hop = this.settings.f_hopper && this.machines && this.machines.hopper;
+      // big / rainbow / giant medals land a little off the middle (the ends feed the gutters / OUT zones)
+      const special = kind >= KIND.RAINBOW;
       if (hop) {
         // poured from the hopper bucket that sweeps over the table
-        const pt = hop.pourPoint();
+        if (special && hop.specialX == null) hop.specialX = offCenterX();
+        const pt = hop.pourPoint(special);
         if (!pt) { this.showerQueue.unshift(kind); this.showerTimer = 0.05; break; }
-        this.physics.cmd('spawn', kind, pt.x, pt.y, pt.z, tiltQ(1.2), { x: rand(-1.2, 1.2), y: rand(-2, 0), z: rand(-1.5, 4.5) }, 0, 0, { x: rand(-6, 6), y: 0, z: rand(-6, 6) });
+        if (special) {
+          hop._lastSpecial = hop.specialX; hop.specialX = null;
+          this.physics.cmd('spawn', kind, pt.x, pt.y, pt.z, tiltQ(0.3), { x: rand(-0.3, 0.3), y: -1, z: rand(0.5, 2.5) }, 0, 0, { x: rand(-2, 2), y: 0, z: rand(-2, 2) });
+        } else this.physics.cmd('spawn', kind, pt.x, pt.y, pt.z, tiltQ(1.2), { x: rand(-1.2, 1.2), y: rand(-2, 0), z: rand(-1.5, 4.5) }, 0, 0, { x: rand(-6, 6), y: 0, z: rand(-6, 6) });
         if (Math.random() < 0.5) this.audio.drop(pt.x / L.halfW * 0.8);
-      } else this.physics.cmd('spawn', kind, rand(-(L.halfW - 0.7), L.halfW - 0.7), rand(5.5, 7.5), rand(L.backWallZ + 0.7, L.frontZ - 3.5), tiltQ(1.2), { x: 0, y: rand(-3, 0), z: 0 }, 0, 0, { x: rand(-4, 4), y: 0, z: rand(-4, 4) });
+      } else if (special) this.physics.cmd('spawn', kind, offCenterX(), rand(5.5, 7.5), rand(-3.5, 0.5), tiltQ(0.3), { x: 0, y: rand(-3, 0), z: 0 }, 0, 0, { x: rand(-2, 2), y: 0, z: rand(-2, 2) });
+      else this.physics.cmd('spawn', kind, rand(-(L.halfW - 0.7), L.halfW - 0.7), rand(5.5, 7.5), rand(L.backWallZ + 0.7, L.frontZ - 3.5), tiltQ(1.2), { x: 0, y: rand(-3, 0), z: 0 }, 0, 0, { x: rand(-4, 4), y: 0, z: rand(-4, 4) });
       this.objCount++;
     }
     if (this.showerTimer < -0.5) this.showerTimer = 0;
@@ -261,7 +307,7 @@ export class Game {
       else if (e.t === 'crane') this._onCrane(e);
       else if (e.t === 'kick') { this.ui.popup('KICK!', e.x, 3, L.backWallZ + 1, '#ff7043', 1.2); this.audio.thump(0, 0.5, 90); this.kickWarn = 0; }
       else if (e.t === 'drain') this._onDrain(e);
-      else if (e.t === 'flip') this.audio.thump(0, 0.12, 220);
+      else if (e.t === 'flip') this._onFlip(e);
       else if (e.t === 'hit') this.audio.impact(e, L.halfW);
       else if (e.t === 'mv') this.motion = e.v;
     }
@@ -269,6 +315,7 @@ export class Game {
 
   _onGate(e) {
     if (!this.settings.f_slot) return;
+    if (this.boss.jam > 0) { if (Math.abs(e.x - this.gateX) <= this.gateHalfRaw() * BOSS.beamReach) this.boss.hitBeam(e.x); return; }
     if (Math.abs(e.x - this.gateX) > this.gateHalf()) return;
     this.prog.add('gatePasses');
     this.features.onGatePass();
@@ -328,7 +375,7 @@ export class Game {
       case KIND.BALL:
         this.boss.damage(BOSS.dmg.ball, e.x);
         this.prog.add('items');
-        if (s.f_jp) { this.jpQueue++; this.backboard.message(t('jpChance'), '#ffd34d', 2, 80); this.audio.itemGet(); }
+        if (s.f_jp) { this.queueJackpot(0); this.backboard.message(t('jpChance'), '#ffd34d', 2, 80); this.audio.itemGet(); }
         else this.credit(20, 'win');
         break;
       case KIND.GEM: {
@@ -364,6 +411,16 @@ export class Game {
     }
   }
 
+  // flipper kick: medals knocked back from the gutters, summed up as a SAVE popup
+  _onFlip(e) {
+    this.audio.thump(0, 0.18, 220);
+    if (!e.n) return;
+    this.prog.add('flipSaves', e.n);
+    this.flipSave = (this.flipSave || 0) + e.n;
+    clearTimeout(this._flipT);
+    this._flipT = setTimeout(() => { if (this.flipSave) { this.ui.popup(`SAVE +${this.flipSave}`, (this._flipSide = -(this._flipSide || 1)) * (L.halfW - 1.5), 1.2, L.sideWallEnd + 1.5, '#9fa8ff', 1.3); this.flipSave = 0; } }, 600);
+  }
+
   _pop(v, x, kind) {
     if (!this.settings.f_floatText) return;
     const a = this.popAgg;
@@ -392,8 +449,8 @@ export class Game {
   activateToken(tok) {
     const s = this.settings;
     this.audio.itemGet();
-    const name = t('tok')[tok];
-    this.ui.banner(name, '#7fe7ff');
+    const durs = { [TOKEN.WALL]: Math.round((B.walls.dur + B.walls.durPerLv * this.upg('wall')) * this.diff.walls), [TOKEN.TURBO]: B.turbo.dur, [TOKEN.DOUBLE]: B.double.dur, [TOKEN.FEVER]: this.feverDur(), [TOKEN.MAGNET]: 12, [TOKEN.FLIPPER]: B.flipperDur };
+    this.announce(TOKEN_INFO[tok], '#7fe7ff', 1.8, [durs[tok] || '']);
     switch (tok) {
       case TOKEN.WALL:
         if (!s.f_walls) { this.shower(10); break; }
@@ -405,7 +462,7 @@ export class Game {
       case TOKEN.DOUBLE: this.fx.double += B.double.dur; break;
       case TOKEN.FEVER: if (s.f_fever) this.startFever(); else this.shower(30); break;
       case TOKEN.STOCK: this.save.stock = this.stockMax(); break;
-      case TOKEN.PLINKO: if (s.f_plinko) this.features.enqueue(() => this.features.plinko()); else this.shower(12); break;
+      case TOKEN.PLINKO: if (s.f_plinko) this.features.enqueue(() => this.features.plinko(), 'plinko'); else this.shower(12); break;
       case TOKEN.DICE: if (s.f_sugoroku) this.features.addDice(2); else this.shower(8); break;
       case TOKEN.MAGNET: this.fx.magnet = (this.fx.magnet || 0) + 12; break;
       case TOKEN.SHAKE: setTimeout(() => this.tableShake(1), 500); break;
@@ -424,14 +481,15 @@ export class Game {
     }
   }
 
+  feverDur() { return B.fever.dur + B.fever.durPerLv * this.upg('fever'); }
   startFever() {
     const first = this.fx.fever <= 0;
-    this.fx.fever += B.fever.dur + B.fever.durPerLv * this.upg('fever');
+    this.fx.fever += this.feverDur();
     if (first) {
       this.prog.add('fevers');
       this.audio.fever = true;
       this.backboard.message('FEVER!!', 'rainbow', 2.5, 120);
-      this.ui.banner('FEVER TIME!!', 'rainbow');
+      this.announce('tok_fever', 'rainbow', 1.8, [this.feverDur()], 'FEVER TIME!!');
       this.effects.confetti(80);
       this.audio.fanfare();
       this.stage.addShake(0.5);
@@ -471,6 +529,7 @@ export class Game {
   // ---------- jackpot ----------
   async _runJackpot() {
     this.jpQueue--;
+    const start = (this.jpStarts && this.jpStarts.shift()) || 0;
     this.jpRunning = true;
     this.holding = false;
     this.prog.add('jpLottery');
@@ -478,7 +537,7 @@ export class Game {
     if (Math.random() < 0.02 * this.upg('jp') + 0.01 * this.upg('luck')) idx = 0;
     if (this.settings.f_croon) {
       this.jpRunning = false;
-      this.features.enqueue(() => this.features.croon());
+      this.features.enqueue(() => this.features.croon(start), 'croon');
       return;
     }
     const res = await this.roulette.run(idx, this.save.jpPool, this.settings.jpSkip, t('jpChance'));
@@ -529,6 +588,14 @@ export class Game {
   }
   onMissionDone(m) { this.toast('✅', `${t('missionDone')}: ${this.ui.missionText(m)}`); this.audio.itemGet(); }
   toast(icon, text) { this.ui.toast(icon, text); }
+  // banner with a plain explanation underneath; the first time an id shows up, also an info card
+  announce(id, color = '#7fe7ff', dur = 1.8, args = [], title) {
+    const inf = infoText(id, ...args);
+    if (!inf) { this.ui.banner(title || id, color, dur); return; }
+    this.ui.banner(title || inf.name, color, dur, inf.desc);
+    const seen = this.save.seenInfo || (this.save.seenInfo = {});
+    if (!seen[id] && this.settings.f_hints !== false) { seen[id] = 1; this.ui.infoCard && this.ui.infoCard(inf); }
+  }
 
   // ---------- shop ----------
   upgradeCost(u, lv) { return Math.round(upgradeCost(u, lv) * (this.diff.upgCost || 1) / 10) * 10; }
@@ -557,7 +624,8 @@ export class Game {
     this.time += dt;
     const s = this.settings;
     // fx timers
-    for (const k in this.fx) if (this.fx[k] > 0) { this.fx[k] = Math.max(0, this.fx[k] - dt); if (k === 'fever' && this.fx.fever === 0) this.audio.fever = false; }
+    const stopped = this.timeStopped();
+    if (!stopped) for (const k in this.fx) if (this.fx[k] > 0) { this.fx[k] = Math.max(0, this.fx[k] - dt); if (k === 'fever' && this.fx.fever === 0) this.audio.fever = false; }
     const walls = (this.fx.walls > 0 || !s.sideLoss) && !this.boss.wallsBlocked();
     if (walls !== this.wallsSent) { this.physics.cmd('walls', walls); this.wallsSent = walls; }
     const speed = (this.fx.turbo > 0 ? B.turbo.speed : 1) * (this.fx.fever > 0 ? 1.15 : 1) * this.features.speedMult() * this.boss.speedMult();
@@ -566,7 +634,7 @@ export class Game {
     if (oz !== this.outSent) { this.physics.cmd('outZone', oz); this.outSent = oz; }
     const mag = this.fx.magnet > 0;
     if (mag !== this.magSent) { this.physics.cmd('magnet', mag); this.magSent = mag; }
-    const flip = !!s.f_flipper && this.fx.flipper > 0;
+    const flip = !!s.f_flipper && (this.fx.flipper > 0 || this.fx.fever > 0);
     if (flip !== this.flipSent) { this.physics.cmd('flippers', flip); this.flipSent = flip; }
     const tt = !!s.f_turntable && (this.fx.fever > 0 || (this.features.event && this.features.event.id === 'spinField'));
     if (tt !== this.ttSent) { this.physics.cmd('turntable', tt); this.ttSent = tt; }
@@ -695,7 +763,8 @@ export class Game {
     this.wheelBusy = false;
     this.prog.add('wheels');
     const s = this.settings;
-    this.ui.banner(`WHEEL: ${seg.label}`, seg.color, 1.8);
+    const wid = seg.n ? 'wh_coins' : seg.item ? 'wh_item' : seg.dice ? 'tok_dice' : seg.tower ? 'wh_tower' : seg.shake ? 'tok_shake' : seg.double ? 'wh_double' : seg.ball ? 'wh_ball' : seg.crane ? 'tok_crane' : 'tok_flipper';
+    this.announce(wid, seg.color, 1.8, [seg.double || ''], `WHEEL: ${seg.label}`);
     if (seg.n) { this.shower(seg.n); seg.n >= 50 ? this.audio.winBig() : this.audio.win('small'); }
     else if (seg.item) { this.spawnRandomItem(); this.audio.itemGet(); }
     else if (seg.dice) { if (s.f_sugoroku) this.features.addDice(seg.dice); else this.shower(8); this.audio.itemGet(); }

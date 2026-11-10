@@ -3,6 +3,7 @@
 import { L, KIND, TOKEN } from '../core/layout.js';
 import { ROAD, ROAD_LAP_BONUS, ROAD_GATE_PER_DIE, roadMult, CROON, PLINKO, EVENTS, EVENT_INTERVAL, POCKET_CYCLE, BONUS_ZONE, B, BOSS } from './balance.js';
 import { t } from '../i18n.js';
+import { infoText } from './info.js';
 
 const rand = (a, b) => a + Math.random() * (b - a);
 
@@ -24,9 +25,20 @@ export class Features {
   get save() { return this.g.save; }
 
   // ---------- overlay queue ----------
-  enqueue(fn) { this.queue.push(fn); }
+  // kind: 'crane' / 'plinko' need the player's input and wait while a timed boost (fever, turbo,
+  // double, lucky gate, hyper, challenge, gold rush) runs, so they never eat into it
+  enqueue(fn, kind = 'other') { this.queue.push({ fn, kind }); }
+  static interactive(kind) { return kind === 'crane' || kind === 'plinko'; }
+  // queued chances that are on hold right now (HUD chip)
+  held() { return this.g.boostActive() ? this.queue.filter(q => Features.interactive(q.kind)).map(q => q.kind) : []; }
+  _nextIndex() {
+    const hold = this.g.boostActive();
+    return this.queue.findIndex(q => !(hold && Features.interactive(q.kind)));
+  }
   async _runNext() {
-    const fn = this.queue.shift();
+    const i = this._nextIndex();
+    if (i < 0) return;
+    const fn = this.queue.splice(i, 1)[0].fn;
     this.busy = true;
     this.g.holding = false;
     try { await fn(); } catch (e) { console.error(e); }
@@ -35,7 +47,7 @@ export class Features {
 
   update(dt) {
     const s = this.s, g = this.g;
-    if (!this.busy && !this.rolling && this.queue.length && !g.roulette.active) this._runNext();
+    if (!this.busy && !this.rolling && this.queue.length && !g.roulette.active && this._nextIndex() >= 0) this._runNext();
     // lucky road: roll stocked dice in a small, non-blocking panel
     if (s.f_sugoroku && !this.busy && !this.rolling && (this.save.dice || 0) > 0 && !this.queue.length && !g.roulette.active) {
       this.save.dice--;
@@ -45,7 +57,7 @@ export class Features {
     // random events
     if (s.f_events) {
       if (this.event) {
-        this.event.t -= dt;
+        if (!g.timeStopped()) this.event.t -= dt;
         if (this.event.id === 'challenge') this._challengeTick();
         if (this.event.id === 'quake' && this.event.quakes > 0 && (this.event.nextQuake -= dt) <= 0) { this.event.quakes--; this.event.nextQuake = 2; this.g.tableShake(0.8); }
         if (this.event.t <= 0) this._endEvent();
@@ -67,7 +79,7 @@ export class Features {
         this.pocketOpen = !this.pocketOpen;
         this.pocketT = this.pocketOpen ? POCKET_CYCLE.open : POCKET_CYCLE.closed * rand(0.7, 1.3);
         g.physics.cmd('pocket', this.pocketOpen);
-        if (this.pocketOpen) { g.ui.banner('POCKET OPEN!', '#7CFFB2', 1.2); g.audio.wall(); }
+        if (this.pocketOpen) { g.announce('pocket', '#7CFFB2', 1.4, [], 'POCKET OPEN!'); g.audio.wall(); }
       }
       this.bonusT += dt;
       this.bonusX = Math.sin(this.bonusT * Math.PI * 2 / BONUS_ZONE.period) * (L.halfW - 1.5);
@@ -140,20 +152,20 @@ export class Features {
     g.prog.add('roadLaps');
     g.shower(Math.min(60, bonus)); if (bonus > 60) g.credit(bonus - 60, 'road');
     if (this.s.f_items) g.spawnRandomItem();
-    g.ui.banner(`LUCKY ROAD CLEAR! +${bonus}`, 'rainbow', 2.5);
+    g.announce('rd_lap', 'rainbow', 2.5, [], `LUCKY ROAD CLEAR! +${bonus}`);
     g.audio.fanfare(); g.effects.confetti(150); g.stage.addShake(0.4);
   }
   async _land(sq) {
     const g = this.g, m = roadMult(this.save.roadLap || 0);
     switch (sq.t) {
-      case 'coin': { const n = Math.round(sq.n * m); g.credit(n, 'road'); g.ui.banner(`+${n}`, '#ffd34d'); g.audio.win('gold'); break; }
-      case 'shower': g.shower(Math.round(sq.n * m)); g.ui.banner(t('shower'), '#7CFFB2'); g.audio.win('bell'); break;
-      case 'back': this.save.roadPos = Math.max(0, (this.save.roadPos || 0) - sq.n); g.ui.banner(`◀ ${sq.n}`, '#ff6b6b'); g.audio.lose(); break;
-      case 'again': this.addDice(1); g.ui.banner('ONE MORE!', '#ffb74d'); break;
+      case 'coin': { const n = Math.round(sq.n * m); g.credit(n, 'road'); g.announce('rd_coin', '#ffd34d', 1.6, [], `+${n}`); g.audio.win('gold'); break; }
+      case 'shower': g.shower(Math.round(sq.n * m)); g.announce('rd_shower', '#7CFFB2', 1.6, [], t('shower')); g.audio.win('bell'); break;
+      case 'back': this.save.roadPos = Math.max(0, (this.save.roadPos || 0) - sq.n); g.announce('rd_back', '#ff6b6b', 1.6, [], `◀ ${sq.n}`); g.audio.lose(); break;
+      case 'again': this.addDice(1); g.announce('rd_again', '#ffb74d', 1.6, [], 'ONE MORE!'); break;
       case 'item': g.spawnRandomItem(); g.audio.itemGet(); break;
       case 'gem': if (this.s.f_gems) g.spawnItem(KIND.GEM); else g.shower(10); g.audio.itemGet(); break;
-      case 'plinko': if (this.s.f_plinko) this.enqueue(() => this.plinko()); else g.shower(10); break;
-      case 'stock': this.save.stock = g.stockMax(); g.audio.gate(); break;
+      case 'plinko': if (this.s.f_plinko) this.enqueue(() => this.plinko(), 'plinko'); else g.shower(10); break;
+      case 'stock': this.save.stock = g.stockMax(); g.announce('rd_stock', '#00e5ff', 1.6, [], 'STOCK MAX'); g.audio.gate(); break;
       case 'ball': if (this.s.f_jp) g.spawnItem(KIND.BALL); else g.shower(15); g.audio.winBig(); break;
       case 'event': if (this.s.f_events && !this.event) this.startEvent(); else g.shower(15); break;
       case 'fever': if (this.s.f_fever) g.startFever(); else g.shower(25); break;
@@ -162,7 +174,7 @@ export class Features {
       case 'boss': {
         // the last square: big reward + JP ball
         const n = Math.round(30 * m); g.shower(Math.min(60, n)); if (n > 60) g.credit(n - 60, 'road');
-        g.spawnItem(KIND.BALL); g.ui.banner(`GOAL BONUS +${n}`, 'rainbow'); g.audio.winBig();
+        g.spawnItem(KIND.BALL); g.announce('rd_goal', 'rainbow', 2, [], `GOAL BONUS +${n}`); g.audio.winBig();
         g.boss.addGauge(Math.round(g.boss.need() * BOSS.gaugeRoad));
         break;
       }
@@ -185,7 +197,7 @@ export class Features {
     const a = Math.random() * Math.PI * 2;
     g.physics.cmd('spawn', KIND.ROCK, x, 7.5, z, { x: 0, y: Math.sin(a / 2), z: 0, w: Math.cos(a / 2) }, { x: 0, y: -3, z: 0 }, 0, 0, { x: rand(-2, 2), y: rand(-1, 1), z: rand(-2, 2) });
     g.objCount++;
-    if (!fromBoss) g.ui.banner(t('rockFall'), '#c8b89a', 1.4);
+    if (!fromBoss) g.announce('ev_rock', '#c8b89a', 1.6, [], t('rockFall'));
     setTimeout(() => { g.stage.addShake(0.35); g.audio.thump(x / L.halfW * 0.8, 0.7, 55); g.vibrate(40); }, 650);
   }
 
@@ -200,7 +212,7 @@ export class Features {
     g.prog.add('events');
     g.audio.siren(); g.audio.setMood('event');
     g.backboard.message('EVENT!', '#ff4060', 2.2, 120);
-    g.ui.banner(t('ev_' + id), '#ff8a65', 2.6);
+    g.announce('ev_' + id, '#ff8a65', 2.6, [def.dur], t('ev_' + id));
     switch (id) {
       case 'meteor':
         g.shower(20); g.shower(1, KIND.BIG); g.shower(3, KIND.GOLD);
@@ -234,19 +246,22 @@ export class Features {
     g.audio.setMood('normal');
   }
   goldRush() { return this.event && this.event.id === 'goldRush' && Math.random() < 0.5; }
+  // a timed event during which the player wants to keep dropping
+  boostEvent() { return !!this.event && ['goldRush', 'hyper', 'luckyGate', 'challenge', 'spinField'].includes(this.event.id); }
   gateMult() { return this.event && this.event.id === 'luckyGate' ? 2.6 : 1; }
   speedMult() { return this.event && this.event.id === 'hyper' ? 1.45 : 1; }
 
   // ---------- mini games ----------
-  async croon() {
+  // start: croon stage to start at (0 = top; the coaster SUPER / PREMIUM routes skip stages)
+  async croon(start = 0) {
     const g = this.g, luck = g.upg('jp') * 0.08 + g.upg('luck') * 0.04;
     const stages = CROON.map((st, i) => ({
       title: ['JP CHANCE', 'SECOND STAGE', 'FINAL STAGE'][i],
       holes: st.holes.map(h => ({ ...h, w: h.good ? 1 + luck : 1 })),
     }));
-    const r = this.s.f_tower3d && g.tower
-      ? await g.tower.run(stages, luck, g.physics, { camera: this.s.towerCam })
-      : await g.mini.croon(stages, g.save.jpPool);
+    let r;
+    if (this.s.f_tower3d && g.tower) r = await g.tower.run(stages, luck, g.physics, { camera: this.s.towerCam, startStage: start });
+    else { r = await g.mini.croon(stages.slice(start), g.save.jpPool); if (r) r = { ...r, stage: r.stage + start }; }
     const h = r.hole;
     g.prog.max('croonBest', r.stage + (h.good ? 1 : 0));
     if (h.jp) return g.payJackpot();

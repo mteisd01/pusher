@@ -342,7 +342,14 @@ export class Stage {
       this.gatePosts[0].position.x = -hw; this.gatePosts[1].position.x = hw;
       this.gateBar.scale.x = hw * 2; this.gateCurtain.scale.x = hw * 2;
       const fl = st.gateFlash || 0;
-      this.gateCurtainMat.opacity = 0.16 + fl * 0.6 + Math.sin(t * 8) * 0.04;
+      // boss jam: the gate turns into a red beam wall that flickers more as it weakens
+      const jam = st.jamK > 0, wasJam = this._gateJam;
+      if (jam !== wasJam) {
+        this._gateJam = jam;
+        const col = jam ? 0xff3d00 : (this.theme ? this.theme.accent : 0x40ffb0);
+        this.gateMat.color.set(col); this.gateCurtainMat.color.set(col);
+      }
+      this.gateCurtainMat.opacity = jam ? (0.35 + 0.35 * st.jamK) * (Math.sin(t * (40 - 25 * st.jamK)) > -0.6 ? 1 : 0.3) : 0.16 + fl * 0.6 + Math.sin(t * 8) * 0.04;
     }
     // LEDs & bulbs
     const th = this.theme;
