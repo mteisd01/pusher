@@ -51,6 +51,7 @@ export const INFO = {
   ev_spinField: { cat: 'event', icon: '🌀', ja: ['スピンフィールド', '左右の回転盤が回り、メダルを中央へ寄せる。{0}秒。'], en: ['Spin field', 'The turntables spin and sweep medals inward. {0}s.'] },
   ev_rock: { cat: 'event', icon: '🪨', ja: ['落石', '重い岩が落ちてくる（修羅・地獄）。押し出すと3枚、ボス戦中は大ダメージ。'], en: ['Falling rock', 'A heavy rock lands (Carnage / Inferno). Pushing it off pays 3 and hits a boss hard.'] },
   // ---- wheel
+  wh_meter: { cat: 'wheel', icon: '🎡', ja: ['WHEEL メーター', '液晶の右側。キャッチャーに12枚入るとホイールが回る。回っている間に入った分は「NEXT +n」として貯まり、続けて次の回転に使われる。'], en: ['WHEEL meter', 'Right of the screen: 12 medals in the catcher spin the wheel. Medals caught while it spins show as "STOCK +n" and go toward the next spins.'] },
   wh_coins: { cat: 'wheel', icon: '🪙', ja: ['コイン', '表示の枚数がホッパーから注がれる。'], en: ['Coins', 'The shown number of medals is poured from the hopper.'] },
   wh_item: { cat: 'wheel', icon: '🎁', ja: ['アイテム', 'ランダムなアイテムが棚に出る。'], en: ['Item', 'A random item lands on the shelf.'] },
   wh_tower: { cat: 'wheel', icon: '🗼', ja: ['タワー', 'メダルタワーが1本置かれる。'], en: ['Tower', 'One medal tower lands on the shelf.'] },

@@ -212,32 +212,45 @@ export class Backboard {
       g.fillStyle = gr; g.beginPath(); g.arc(cx, lampY, 12, 0, Math.PI * 2); g.fill();
     }
     // side status panels
-    const side = (x, lines) => {
-      g.fillStyle = 'rgba(0,0,0,.5)'; roundRect(g, x, 140, 120, 220, 12); g.fill();
-      g.textAlign = 'center';
-      lines.forEach((ln, i) => { g.fillStyle = ln[1]; g.font = `900 ${ln[2] || 22}px "Arial Black", Arial`; g.fillText(ln[0], x + 60, 175 + i * 46); });
-    };
-    const fx = st.effects;
-    const left = [], right = [];
-    if (st.rush) left.push(['RUSH', `hsl(${(t * 300) % 360},100%,60%)`], [`${st.rush.left}`, '#fff', 30], [`${st.rush.chain}連`, '#ffd34d', 26]);
-    if (fx.fever > 0) left.push(['FEVER', `hsl(${(t * 200) % 360},100%,60%)`], [`${Math.ceil(fx.fever)}s`, '#fff', 30]);
-    if (fx.walls > 0) left.push(['WALL', '#4fc3ff'], [`${Math.ceil(fx.walls)}s`, '#fff', 30]);
-    if (fx.turbo > 0) right.push(['TURBO', '#ff9f43'], [`${Math.ceil(fx.turbo)}s`, '#fff', 30]);
-    if (fx.double > 0) right.push(['×2', '#c38bff', 30], [`${Math.ceil(fx.double)}s`, '#fff', 30]);
-    if (fx.magnet > 0) right.push(['MAGNET', '#ff6b6b', 20], [`${Math.ceil(fx.magnet)}s`, '#fff', 30]);
-    if (st.bossGauge >= 0 && !st.boss && right.length < 4) right.push(['BOSS', '#ff6e6e', 22], [`${Math.floor(st.bossGauge * 100)}%`, st.bossGauge > 0.85 && Math.floor(t * 3) % 2 ? '#ff5252' : '#fff', 30]);
-    if (st.jam > 0) left.unshift(['BEAM', '#ff6e40', 22], [`${st.beamHp}/${st.beamMax}`, '#fff', 30]);
-    if (st.warn) left.unshift(['WARN', '#ffab40', 20], [`${Math.ceil(st.warn.t)}`, Math.floor(t * 6) % 2 ? '#ffab40' : '#fff', 30]);
-    if (st.freeze > 0) left.unshift(['FREEZE', '#80d8ff', 20], [`${Math.ceil(st.freeze)}s`, '#fff', 30]);
-        if (st.wheelMeter >= 0 && right.length < 4) right.push(['WHEEL', '#7CFFB2', 22], [`${Math.min(st.wheelMeter, st.wheelNeed)}/${st.wheelNeed}`, '#7CFFB2', 30]);
-    if (st.event) {
-      const ev = st.event;
-      const lines = [['EVENT', '#ff8a65'], [`${Math.ceil(ev.t)}s`, '#fff', 30]];
-      if (ev.id === 'challenge') lines.push([`${ev.progress || 0}/${ev.target}`, '#7CFFB2', 26]);
-      left.unshift(...lines);
+    // Right panel is fixed (always BOSS gauge on top, WHEEL meter below) so a glance always finds
+    // them in the same place. Everything that comes and goes (timed effects, RUSH, boss attacks,
+    // events) is listed on the left panel, most urgent first.
+    const panel = x => { g.fillStyle = 'rgba(0,0,0,.5)'; roundRect(g, x, 140, 120, 220, 12); g.fill(); g.textAlign = 'center'; };
+    const txt = (s2, x, y, col, size) => { g.fillStyle = col; g.font = `900 ${size}px "Arial Black", Arial`; g.fillText(s2, x, y); };
+    const fx = st.effects, left = [];
+    const sec = v => `${Math.ceil(v)}s`;
+    if (st.warn) left.push(['WARN', '#ffab40', `${Math.ceil(st.warn.t)}`, Math.floor(t * 6) % 2 ? '#ffab40' : '#fff']);
+    if (st.freeze > 0) left.push(['FREEZE', '#80d8ff', sec(st.freeze)]);
+    if (st.jam > 0) left.push(['BEAM', '#ff6e40', `${st.beamHp}/${st.beamMax}`]);
+    if (st.event) left.push(['EVENT', '#ff8a65', st.event.id === 'challenge' ? `${st.event.progress || 0}/${st.event.target}` : sec(st.event.t)]);
+    if (st.rush) left.push(['RUSH ' + st.rush.chain + '連', `hsl(${(t * 300) % 360},100%,60%)`, `${st.rush.left}`]);
+    if (fx.fever > 0) left.push(['FEVER', `hsl(${(t * 200) % 360},100%,60%)`, sec(fx.fever)]);
+    if (fx.walls > 0) left.push(['WALL', '#4fc3ff', sec(fx.walls)]);
+    if (fx.turbo > 0) left.push(['TURBO', '#ff9f43', sec(fx.turbo)]);
+    if (fx.double > 0) left.push(['×2', '#c38bff', sec(fx.double)]);
+    if (fx.magnet > 0) left.push(['MAGNET', '#ff6b6b', sec(fx.magnet)]);
+    if (left.length) {
+      panel(14);
+      const shown = left.length > 4 ? left.slice(0, 3) : left;
+      shown.forEach(([lab, col, val, vcol], i) => { txt(lab, 74, 166 + i * 52, col, 17); txt(val, 74, 192 + i * 52, vcol || '#fff', 26); });
+      if (left.length > 4) txt(`+${left.length - 3}`, 74, 166 + 3 * 52 + 12, '#aaa', 22);
     }
-    if (left.length) side(14, left.slice(0, 4));
-    if (right.length) side(W - 134, right.slice(0, 4));
+    if (st.bossGauge >= 0 || st.wheelMeter >= 0) {
+      const rx = W - 74;
+      panel(W - 134);
+      if (st.bossGauge >= 0) {
+        txt('BOSS', rx, 172, '#ff6e6e', 22);
+        if (st.boss) txt('FIGHT!', rx, 210, Math.floor(t * 3) % 2 ? '#ff5252' : '#fff', 26);
+        else txt(`${Math.floor(st.bossGauge * 100)}%`, rx, 210, st.bossGauge > 0.85 && Math.floor(t * 3) % 2 ? '#ff5252' : '#fff', 30);
+      }
+      if (st.wheelMeter >= 0) {
+        // past the need the spin is waiting; the extra medals are stocked toward the next spins
+        const need = st.wheelNeed, m = st.wheelMeter, over = Math.max(0, m - need), full = m >= need;
+        txt('WHEEL', rx, 258, '#7CFFB2', 22);
+        txt(`${Math.min(m, need)}/${need}`, rx, 296, full && Math.floor(t * 3) % 2 ? '#ffd34d' : '#7CFFB2', 30);
+        if (over > 0) txt(`NEXT +${over}`, rx, 332, '#ffd34d', 18);
+      }
+    }
     // message overlay
     if (this.msg) {
       const m = this.msg, k = 1 - m.t / m.dur;
